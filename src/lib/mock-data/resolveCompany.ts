@@ -25,8 +25,10 @@ function pickArchetypeFromSeed(seed: string): RiskArchetype {
 /**
  * Определяет, к какому демо-профилю относится пользовательский запрос:
  * к одной из кураторских демо-компаний (стабильный, заранее продуманный
- * профиль) или к процедурно генерируемому профилю (для произвольного
- * ИНН/ОГРН/названия, которого нет в кураторском наборе).
+ * профиль, curated: true — реальные источники не опрашиваются) или к
+ * процедурно генерируемому профилю (curated: false — для произвольного
+ * ИНН/ОГРН/названия адаптеры реальных источников, например DaData в
+ * providers/fns.ts, сначала пытаются получить настоящие данные).
  */
 export function resolveCompanyQuery(normalizedQuery: string): ResolvedCompanyQuery {
   const kind = detectQueryKind(normalizedQuery);
@@ -37,13 +39,21 @@ export function resolveCompanyQuery(normalizedQuery: string): ResolvedCompanyQue
       return {
         seed: seedCompany.inn,
         archetype: seedCompany.archetype,
+        curated: true,
+        rawQuery: normalizedQuery,
         knownFullName: seedCompany.fullName,
         knownShortName: seedCompany.shortName,
         knownInn: seedCompany.inn,
         knownOgrn: seedCompany.ogrn,
       };
     }
-    return { seed: normalizedQuery, archetype: pickArchetypeFromSeed(normalizedQuery), knownInn: normalizedQuery };
+    return {
+      seed: normalizedQuery,
+      archetype: pickArchetypeFromSeed(normalizedQuery),
+      curated: false,
+      rawQuery: normalizedQuery,
+      knownInn: normalizedQuery,
+    };
   }
 
   if (kind === "ogrn") {
@@ -52,13 +62,21 @@ export function resolveCompanyQuery(normalizedQuery: string): ResolvedCompanyQue
       return {
         seed: seedCompany.ogrn,
         archetype: seedCompany.archetype,
+        curated: true,
+        rawQuery: normalizedQuery,
         knownFullName: seedCompany.fullName,
         knownShortName: seedCompany.shortName,
         knownInn: seedCompany.inn,
         knownOgrn: seedCompany.ogrn,
       };
     }
-    return { seed: normalizedQuery, archetype: pickArchetypeFromSeed(normalizedQuery), knownOgrn: normalizedQuery };
+    return {
+      seed: normalizedQuery,
+      archetype: pickArchetypeFromSeed(normalizedQuery),
+      curated: false,
+      rawQuery: normalizedQuery,
+      knownOgrn: normalizedQuery,
+    };
   }
 
   // kind === "name"
@@ -67,6 +85,8 @@ export function resolveCompanyQuery(normalizedQuery: string): ResolvedCompanyQue
     return {
       seed: seedCompany.inn,
       archetype: seedCompany.archetype,
+      curated: true,
+      rawQuery: normalizedQuery,
       knownFullName: seedCompany.fullName,
       knownShortName: seedCompany.shortName,
       knownInn: seedCompany.inn,
@@ -78,6 +98,8 @@ export function resolveCompanyQuery(normalizedQuery: string): ResolvedCompanyQue
   return {
     seed: normalizedQuery.toLowerCase(),
     archetype: pickArchetypeFromSeed(normalizedQuery.toLowerCase()),
+    curated: false,
+    rawQuery: normalizedQuery,
     knownFullName: shortName,
     knownShortName: shortName,
   };

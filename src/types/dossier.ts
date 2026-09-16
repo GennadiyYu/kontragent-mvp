@@ -299,5 +299,12 @@ export interface CompanyDossier {
   sources: SourceStatusSummary[];
   riskAssessment: RiskAssessment;
   aiSummary: AiSummary | null;
-  isDemoData: true; // в текущей версии MVP все данные демонстрационные
+  /**
+   * true, если хотя бы один раздел досье построен на демонстрационных данных
+   * (см. sources[].status: "demo" означает демо-раздел, "ok" — реальный).
+   * В текущей версии MVP реальный источник подключён только для части
+   * установочных данных (ФНС/ЕГРЮЛ через DaData) — это поле поэтому
+   * практически всегда true.
+   */
+  isDemoData: boolean;
 }

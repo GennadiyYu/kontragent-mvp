@@ -48,7 +48,7 @@ export async function checkCompany(rawQuery: string): Promise<CheckCompanyResult
     sources,
     riskAssessment,
     aiSummary,
-    isDemoData: true,
+    isDemoData: sources.some((s) => s.status !== "ok"),
   };
 
   // Запись в историю не должна блокировать ответ пользователю при сбое хранилища.

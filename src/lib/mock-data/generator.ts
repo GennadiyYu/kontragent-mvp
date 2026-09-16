@@ -44,6 +44,17 @@ export type RiskArchetype = "low" | "moderate" | "high" | "critical";
 export interface ResolvedCompanyQuery {
   seed: string;
   archetype: RiskArchetype;
+  /**
+   * true — запрос совпал с одной из кураторских демо-компаний (см.
+   * mock-data/companies.ts): для неё ВСЕГДА используется стабильный демо-
+   * профиль, реальные источники (DaData и т.д.) не опрашиваются, даже если
+   * ключ настроен. false — произвольный запрос пользователя, для которого
+   * адаптеры реальных источников (см. providers/fns.ts) пытаются получить
+   * настоящие данные, прежде чем откатиться на демо-генератор.
+   */
+  curated: boolean;
+  /** Исходный нормализованный запрос пользователя (для поиска по названию в реальных источниках). */
+  rawQuery: string;
   knownFullName?: string;
   knownShortName?: string;
   knownInn?: string;
