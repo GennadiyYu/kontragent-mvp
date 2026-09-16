@@ -87,6 +87,17 @@ export default function OwnersTab({
         <SourceFootnote label="ФНС России — ЕГРЮЛ" url={relatedCompanies.meta.sourceUrl} />
       </Card>
 
+      {licenses.warningListEntry && (
+        <Card>
+          <SectionTitle>Предупредительный список Банка России</SectionTitle>
+          <p className="text-sm text-red-600">
+            ⚠ Компания включена ЦБ РФ в список с признаками нелегальной деятельности на финансовом рынке:{" "}
+            <strong>{licenses.warningListEntry.sign}</strong> (внесено: {formatDate(licenses.warningListEntry.addedDate)})
+          </p>
+          <SourceFootnote label="Банк России — предупредительный список" url="https://www.cbr.ru/inside/warning-list/" />
+        </Card>
+      )}
+
       {licenses.items.length > 0 && (
         <Card>
           <SectionTitle>Лицензии</SectionTitle>
@@ -101,7 +112,11 @@ export default function OwnersTab({
                 </div>
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                    l.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                    l.status === "active"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : l.status === "expired"
+                        ? "bg-slate-200 text-slate-700"
+                        : "bg-red-100 text-red-700"
                   }`}
                 >
                   {l.statusLabel}

@@ -23,7 +23,9 @@ function Field({ label, value }: { label: string; value: string }) {
 export default function CompanyHeader({ dossier }: { dossier: CompanyDossier }) {
   const { company, management } = dossier;
   const fnsSource = dossier.sources.find((s) => s.source === "FNS");
+  const cbrSource = dossier.sources.find((s) => s.source === "CBR");
   const isFnsReal = fnsSource?.status === "ok";
+  const isCbrReal = cbrSource?.status === "ok";
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -31,9 +33,9 @@ export default function CompanyHeader({ dossier }: { dossier: CompanyDossier }) 
         <p className="text-xs text-amber-800">
           {isFnsReal ? (
             <>
-              <strong>Установочные данные реальны</strong> (ЕГРЮЛ, через DaData). Остальные разделы —
-              финансы, суды, ФССП, банкротство, закупки, репутация — пока демонстрационные. Подробный статус
-              каждого источника — на вкладке «Источники».
+              <strong>Установочные данные реальны</strong> (ЕГРЮЛ, через DaData){isCbrReal ? ", лицензии и предупредительный список ЦБ — тоже реальны (Банк России)" : ""}.
+              Остальные разделы — финансы, суды, ФССП, банкротство, закупки, репутация — пока демонстрационные
+              (для части из них это подтверждённое отсутствие бесплатного доступа, см. вкладку «Источники»).
             </>
           ) : (
             <>

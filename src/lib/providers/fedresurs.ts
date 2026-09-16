@@ -9,9 +9,12 @@ export interface FedresursData {
 
 /**
  * Адаптер Федресурса (fedresurs.ru): банкротные процедуры и юридически
- * значимые сообщения. Демонстрационные данные — у Федресурса есть открытое
- * API, но для промышленного использования требуется соглашение и токен
- * доступа.
+ * значимые сообщения.
+ *
+ * ИССЛЕДОВАНО (см. README): и fedresurs.ru, и bankrot.fedresurs.ru при
+ * проверке возвращали 401 Unauthorized на автоматические запросы без
+ * авторизованной сессии — публичного бесплатного API без соглашения не
+ * обнаружено. Источник помечен "blocked", используются демо-данные.
  */
 export const fedresursAdapter: DataProviderAdapter<FedresursData> = {
   id: "FEDRESURS",
@@ -23,10 +26,11 @@ export const fedresursAdapter: DataProviderAdapter<FedresursData> = {
     const core = buildCompanyCore(query);
     return {
       source: "FEDRESURS",
-      status: "demo",
+      status: "blocked",
       data: { bankruptcy: core.bankruptcy },
       retrievedAt: new Date().toISOString(),
       latencyMs: Date.now() - started,
+      errorMessage: "fedresurs.ru возвращает 401 Unauthorized на запросы без авторизованной сессии — публичного бесплатного API не найдено",
     };
   },
 };

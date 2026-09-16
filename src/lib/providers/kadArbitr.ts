@@ -9,9 +9,13 @@ export interface KadArbitrData {
 
 /**
  * Адаптер картотеки арбитражных дел (КАД Арбитр, kad.arbitr.ru):
- * судебные споры с участием компании. Демонстрационные данные — у КАД Арбитр
- * нет официального публичного API с ключом, для реальной интеграции
- * потребуется партнёрский доступ или согласованный парсинг.
+ * судебные споры с участием компании.
+ *
+ * ИССЛЕДОВАНО (см. README, раздел «Исследование источников»): у kad.arbitr.ru
+ * нет официального публичного API/открытых данных. Форма поиска защищена
+ * CAPTCHA — это подтверждённая, общеизвестная защита от автоматических
+ * запросов, встроенная в сам сервис. По прямому указанию задачи CAPTCHA не
+ * обходится — источник помечен "blocked", используются демо-данные.
  */
 export const kadArbitrAdapter: DataProviderAdapter<KadArbitrData> = {
   id: "KAD_ARBITR",
@@ -23,10 +27,11 @@ export const kadArbitrAdapter: DataProviderAdapter<KadArbitrData> = {
     const core = buildCompanyCore(query);
     return {
       source: "KAD_ARBITR",
-      status: "demo",
+      status: "blocked",
       data: { arbitration: core.arbitration },
       retrievedAt: new Date().toISOString(),
       latencyMs: Date.now() - started,
+      errorMessage: "Поиск на kad.arbitr.ru защищён CAPTCHA — автоматический обход запрещён политикой сервиса и условиями этой задачи",
     };
   },
 };

@@ -164,7 +164,7 @@ export async function aggregateDossierData(query: ResolvedCompanyQuery): Promise
       contracts: [],
       meta: { source: "EIS_ZAKUPKI", retrievedAt: new Date().toISOString(), reliability: "unconfirmed" },
     },
-    licenses: cbr.data?.licenses ?? { items: [], meta: { source: "CBR", retrievedAt: new Date().toISOString(), reliability: "unconfirmed" } },
+    licenses: cbr.data?.licenses ?? { items: [], warningListEntry: null, meta: { source: "CBR", retrievedAt: new Date().toISOString(), reliability: "unconfirmed" } },
     reputation: webReputation.data?.reputation ?? {
       mentions: [],
       negativeMentionsCount: 0,
@@ -188,7 +188,8 @@ export async function aggregateDossierData(query: ResolvedCompanyQuery): Promise
 
   const noteByStatus: Record<string, string> = {
     ok: "Данные получены",
-    demo: "Демонстрационные данные (интеграция с реальным источником ещё не подключена)",
+    demo: "Демонстрационные данные (интеграция с реальным источником — решение продукта, см. README)",
+    blocked: "Реальный бесплатный автоматический доступ подтверждённо недоступен (см. вкладку «Источники»)",
     timeout: "Источник не ответил вовремя — раздел построен по доступным данным",
     unavailable: "Источник временно недоступен",
     not_applicable: "Неприменимо к виду деятельности компании",

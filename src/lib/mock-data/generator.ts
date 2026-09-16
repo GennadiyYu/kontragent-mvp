@@ -435,7 +435,7 @@ export function buildCompanyCore(resolved: ResolvedCompanyQuery): CompanyCoreDat
   };
 
   // --- licenses (ЦБ РФ / отраслевые реестры) ---
-  const licenses: LicensesInfo = { items: [], meta: meta("CBR") };
+  const licenses: LicensesInfo = { items: [], warningListEntry: null, meta: meta("CBR") };
   if (okved.requiresLicense) {
     const licenseStatus: LicensesInfo["items"][number]["status"] = archetype === "critical" && rnd.chance(0.3) ? "revoked" : "active";
     licenses.items.push({

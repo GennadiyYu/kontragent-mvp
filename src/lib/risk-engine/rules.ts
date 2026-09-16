@@ -98,6 +98,19 @@ export const RISK_RULES: RiskRule[] = [
       return [];
     },
   },
+  {
+    id: "corporate.cbr_warning_list",
+    category: "corporate",
+    evaluate: (input) => {
+      if (!input.licenses.warningListEntry) return [];
+      return [{
+        ruleId: "corporate.cbr_warning_list",
+        category: "corporate",
+        points: 30,
+        description: `Банк России включил компанию в предупредительный список с признаками нелегальной деятельности на финансовом рынке: «${input.licenses.warningListEntry.sign}»`,
+      }];
+    },
+  },
 
   // ---------------------------------------------------------------- FINANCIAL
   {

@@ -10,8 +10,14 @@ export interface GirboData {
 /**
  * Адаптер ГИР БО (Государственный информационный ресурс бухгалтерской
  * отчётности ФНС): выручка, прибыль, активы, капитал за последние периоды.
- * Демонстрационные данные — реальная интеграция подключается через открытый
- * API ГИР БО без API-ключа, но требует отдельной реализации парсинга.
+ *
+ * ИССЛЕДОВАНО (см. README): у ФНС ДЕЙСТВИТЕЛЬНО есть официальные открытые
+ * данные бухотчётности (nalog.gov.ru/opendata, набор «Сведения о суммах
+ * доходов и расходов…», XML) — легальный источник, но это сплошной
+ * общероссийский годовой массив без адресного API «по ИНН», требующий
+ * ETL/БД для по-запросной выдачи (вне рамок MVP без внешней БД). Сам
+ * веб-поиск bo.nalog.ru при проверке не отвечал на автоматические запросы
+ * (таймаут — сетевая защита от ботов). Источник помечен "blocked".
  */
 export const girboAdapter: DataProviderAdapter<GirboData> = {
   id: "GIRBO",
@@ -23,10 +29,11 @@ export const girboAdapter: DataProviderAdapter<GirboData> = {
     const core = buildCompanyCore(query);
     return {
       source: "GIRBO",
-      status: "demo",
+      status: "blocked",
       data: { finance: core.finance },
       retrievedAt: new Date().toISOString(),
       latencyMs: Date.now() - started,
+      errorMessage: "bo.nalog.ru не отвечает на автоматические запросы; открытые данные ФНС — сплошной массив без адресного API по ИНН",
     };
   },
 };

@@ -177,8 +177,22 @@ export interface LicenseInfo {
   meta: FactMeta;
 }
 
+/** Запись в предупредительном списке Банка России о признаках нелегальной деятельности на финансовом рынке. */
+export interface CbrWarningListEntry {
+  sign: string; // например «Признаки финансовой пирамиды»
+  addedDate: string;
+  meta: FactMeta;
+}
+
 export interface LicensesInfo {
   items: LicenseInfo[];
+  /**
+   * null — компания не найдена в предупредительном списке ЦБ РФ (или проверка
+   * не выполнялась, например для кураторских демо-компаний). Заполняется
+   * только реальной проверкой по ИНН (см. providers/cbr.ts) — никогда не
+   * генерируется демо-данными, чтобы не создавать ложных обвинений.
+   */
+  warningListEntry: CbrWarningListEntry | null;
   meta: FactMeta;
 }
 

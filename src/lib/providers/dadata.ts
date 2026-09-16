@@ -12,9 +12,13 @@
  * а когда — к демонстрационному генератору.
  */
 
+import { cacheGet, cacheSet } from "./cache";
+
 const FIND_BY_ID_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party";
 const SUGGEST_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/party";
 const REQUEST_TIMEOUT_MS = 5000;
+/** Регистрационные данные компании не меняются поминутно — кешируем на 30 минут, чтобы не расходовать квоту DaData на повторные проверки. */
+const CACHE_TTL_MS = 30 * 60 * 1000;
 
 export interface DaDataPartyRecord {
   value: string;
@@ -47,6 +51,21 @@ async function callDaData(url: string, body: Record<string, unknown>, signal: Ab
   const apiKey = process.env.DADATA_API_KEY;
   if (!apiKey) return null;
 
+  const cacheKey = `dadata:${url}:${JSON.stringify(body)}`;
+  const cachedValue = cacheGet<DaDataPartyRecord | null>(cacheKey);
+  if (cachedValue !== undefined) return cachedValue;
+
+  const record = await callDaDataUncached(url, body, apiKey, signal);
+  cacheSet(cacheKey, record, CACHE_TTL_MS);
+  return record;
+}
+
+async function callDaDataUncached(
+  url: string,
+  body: Record<string, unknown>,
+  apiKey: string,
+  signal: AbortSignal
+): Promise<DaDataPartyRecord | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   // Отменяем запрос и по внешнему сигналу (общий таймаут агрегатора), и по своему.

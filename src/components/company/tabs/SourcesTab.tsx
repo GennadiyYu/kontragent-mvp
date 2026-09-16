@@ -5,6 +5,7 @@ import { Card, EmptyState, SectionTitle } from "../ui";
 const STATUS_STYLE: Record<SourceStatusSummary["status"], string> = {
   ok: "bg-emerald-100 text-emerald-700",
   demo: "bg-blue-100 text-blue-700",
+  blocked: "bg-slate-200 text-slate-600",
   timeout: "bg-amber-100 text-amber-700",
   unavailable: "bg-red-100 text-red-700",
   not_applicable: "bg-slate-200 text-slate-600",
@@ -13,6 +14,7 @@ const STATUS_STYLE: Record<SourceStatusSummary["status"], string> = {
 const STATUS_LABEL: Record<SourceStatusSummary["status"], string> = {
   ok: "Данные получены",
   demo: "Демо-данные",
+  blocked: "Недоступен бесплатно",
   timeout: "Таймаут",
   unavailable: "Недоступен",
   not_applicable: "Неприменимо",
@@ -36,9 +38,13 @@ export default function SourcesTab({ sources, events }: { sources: SourceStatusS
           ))}
         </div>
         <p className="mt-4 text-xs text-slate-400">
-          Источник ФНС при наличии ключа DaData возвращает реальные данные ЕГРЮЛ (статус «Данные получены»);
-          остальные источники в текущей версии — демонстрационные («Демо-данные»). Устойчивость к сбоям
-          источников (таймаут/недоступность) реализована на уровне агрегатора и не влияет на остальные разделы досье.
+          ФНС (через DaData) и Банк России (через FinOrg.asmx и предупредительный список) возвращают реальные
+          данные — статус «Данные получены». КАД Арбитр, ФССП, ЕИС закупки, Федресурс и ГИР БО помечены «Недоступен
+          бесплатно» — при исследовании подтверждено, что их официальные сервисы либо защищены CAPTCHA, либо не
+          отвечают на автоматические запросы вне браузера (см. README, раздел «Исследование источников»); попытка
+          такие ограничения обойти не предпринималась. Веб-репутация — демонстрационные данные: платный поисковый
+          API сознательно не подключён. Устойчивость к сбоям источников реализована на уровне агрегатора и не
+          влияет на остальные разделы досье.
         </p>
       </Card>
 
