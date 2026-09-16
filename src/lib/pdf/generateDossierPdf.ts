@@ -198,7 +198,11 @@ export function generateDossierPdf(dossier: CompanyDossier): Buffer {
   d.text('Сервис проверки контрагентов «Контрагент»', MARGIN, 22);
   d.setFontSize(8.5);
   d.setTextColor(203, 213, 225);
-  d.text(`Демонстрационные данные · сформировано ${formatDateTime(dossier.generatedAt)}`, MARGIN, 28);
+  d.text(
+    `${dossier.isDemoData ? "Частично демонстрационные данные" : "Реальные данные"} · сформировано ${formatDateTime(dossier.generatedAt)}`,
+    MARGIN,
+    28
+  );
   w.y = 42;
 
   w.paragraph(`ОБЪЕКТ: ${dossier.company.fullName}`, { bold: true, size: 12.5 });
@@ -215,6 +219,12 @@ export function generateDossierPdf(dossier: CompanyDossier): Buffer {
   d.text("ОБЩИЙ РИСК", MARGIN, scoreY + 15);
   riskBadgeBlock(w, dossier.riskAssessment.totalScore, dossier.riskAssessment.level);
   w.y = scoreY + 30;
+  const coverage = dossier.riskAssessment.coverage;
+  w.paragraph(
+    `Достоверность оценки: ${coverage.percent}% (проверено ${coverage.realCategories} из ${coverage.totalCategories} категорий реальными данными).` +
+      (coverage.isPreliminary ? " Оценка предварительная: часть источников недоступна." : ""),
+    { size: 8.5, color: coverage.isPreliminary ? RISK_COLOR.high : COLORS.muted, bold: coverage.isPreliminary }
+  );
   w.divider();
 
   // --- 1. Главное резюме ---

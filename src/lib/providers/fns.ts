@@ -10,6 +10,7 @@ import { COMPANY_STATUS_LABEL } from "@/lib/utils/companyStatus";
 import { LEGAL_FORMS } from "@/lib/mock-data/lexicon";
 import { simulateLatency } from "./mockLatency";
 import { fetchDaDataByInnOrOgrn, fetchDaDataByName, type DaDataPartyRecord } from "./dadata";
+import { findDisqualifiedMatch, getSpecialRegime, getTaxDebt } from "./fnsRiskDb";
 import type { DataProviderAdapter } from "./types";
 
 export interface FnsData {
@@ -34,7 +35,7 @@ function guessLegalFormFull(shortWithOpf?: string, opfFull?: string): string {
 }
 
 /** Преобразует запись DaData (реальные данные ЕГРЮЛ) в наши типы company/identity/management. */
-function mapDaDataRecord(record: DaDataPartyRecord): Pick<FnsData, "company" | "identity" | "management"> {
+async function mapDaDataRecord(record: DaDataPartyRecord): Promise<Pick<FnsData, "company" | "identity" | "management">> {
   const d = record.data;
   const now = new Date().toISOString();
   const meta = { source: "FNS" as const, retrievedAt: now, reliability: "verified" as const };
@@ -60,21 +61,35 @@ function mapDaDataRecord(record: DaDataPartyRecord): Pick<FnsData, "company" | "
     meta,
   };
 
+  // Реальные открытые данные ФНС (локальная БД, см. providers/fnsRiskDb.ts и
+  // scripts/import-fns-risk.mjs) — налоговая задолженность и спецрежим.
+  // undefined, если ETL не выполнялся или ИНН не найден в датасете.
+  const [taxDebt, specialRegime] = await Promise.all([getTaxDebt(d.inn), getSpecialRegime(d.inn)]);
+
   const identity: RegistryFlags = {
     // Бесплатный тариф DaData не даёт отдельный признак «массовый адрес» —
     // честно оставляем false, а не выдумываем; агрегированный признак
     // недостоверности (data.invalid) отражаем как есть.
     addressIsMassRegistration: false,
     hasUnreliableDataMark: Boolean(d.invalid),
+    taxDebtAmount: taxDebt ? taxDebt.amount : null,
+    hasSpecialTaxRegime: specialRegime ? specialRegime.isUsn || specialRegime.isAusn || specialRegime.isEsxn || specialRegime.isSrp : undefined,
     meta,
   };
 
+  const directorFullName = d.management?.name ?? "Не указан";
+  // Сверка с реестром дисквалифицированных лиц ФНС — ТОЛЬКО по совпадению
+  // (ФИО директора + название именно этой компании), см. fnsRiskDb.ts —
+  // исключает ложные срабатывания на однофамильцев.
+  const disqualifiedMatch =
+    (await findDisqualifiedMatch(directorFullName, company.shortName)) ?? (await findDisqualifiedMatch(directorFullName, company.fullName));
+
   const management: ManagementInfo = {
     director: {
-      fullName: d.management?.name ?? "Не указан",
+      fullName: directorFullName,
       position: d.management?.post ?? "Руководитель",
       isMassDirector: false, // недоступно на бесплатном тарифе DaData
-      isDisqualified: Boolean(d.management?.disqualified),
+      isDisqualified: Boolean(d.management?.disqualified) || Boolean(disqualifiedMatch),
       meta,
     },
     registryFlags: identity,
@@ -93,7 +108,7 @@ async function tryRealLookup(query: ResolvedCompanyQuery, signal: AbortSignal): 
     else if (query.knownOgrn) record = await fetchDaDataByInnOrOgrn(query.knownOgrn, signal);
     else record = await fetchDaDataByName(query.rawQuery, signal);
     if (!record?.data?.inn) return null;
-    return mapDaDataRecord(record);
+    return await mapDaDataRecord(record);
   } catch {
     return null; // любая ошибка реального источника — тихий откат на демо-данные, а не сбой проверки
   }
@@ -108,12 +123,15 @@ async function tryRealLookup(query: ResolvedCompanyQuery, signal: AbortSignal): 
  * демо-генератор, помеченный reliability: "demo".
  *
  * Про «Связи» (владелец/директор → другие юрлица): ИССЛЕДОВАНО (см. README)
- * — у ФНС ЕСТЬ легальные открытые данные для этого (nalog.gov.ru/opendata,
- * наборы «Сведения о физлицах — учредителях/руководителях нескольких
- * юрлиц», CSV, сотни тысяч — миллионы строк), но это сплошные общероссийские
- * выгрузки без адресного API «по директору/ИНН» — построить точечный запрос
- * без ETL в БД (вне рамок текущего MVP без внешней БД) надёжно нельзя.
- * Оставлено демонстрационным осознанно, а не потому что данных не существует.
+ * — датасеты ФНС «массовый руководитель/учредитель» существуют формально,
+ * но ФАКТИЧЕСКИ ЗАБРОШЕНЫ (последнее обновление — 22.05.2021, почти пустые
+ * файлы) — использовать нельзя. Owners/relatedCompanies остаются
+ * демонстрационными по этой причине, а не потому что не пытались.
+ * Дисквалификация директора, напротив, реальна и актуальна (реестр
+ * обновляется) — см. fnsRiskDb.findDisqualifiedMatch ниже: сверяется СТРОГО
+ * по паре (ФИО директора + название именно этой компании), чтобы не
+ * приписать дисквалификацию однофамильцу. Налоговая задолженность
+ * (identity.taxDebtAmount) — тоже реальные данные ФНС (датасет debtam).
  */
 export const fnsAdapter: DataProviderAdapter<FnsData> = {
   id: "FNS",

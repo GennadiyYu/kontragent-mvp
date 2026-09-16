@@ -30,6 +30,15 @@ export interface RegistryFlags {
   addressIsMassRegistration: boolean; // массовый адрес регистрации
   hasUnreliableDataMark: boolean; // отметка о недостоверности сведений (ФНС)
   taxAuthorityName?: string;
+  /**
+   * Налоговая задолженность (пени/недоимка/штрафы), ₽ — реальные открытые
+   * данные ФНС (см. scripts/import-fns-risk.mjs, датасет debtam), импортированы
+   * локально в БД. null — компания проверена, задолженности не найдено.
+   * undefined — проверка не выполнялась (например, для демо-компаний).
+   */
+  taxDebtAmount?: number | null;
+  /** Применяет ли компания спецрежим налогообложения (УСН/АУСН/ЕСХН) — реальные данные ФНС (snr), информационный признак, не влияет на risk-engine. */
+  hasSpecialTaxRegime?: boolean;
   meta: FactMeta;
 }
 
@@ -78,10 +87,23 @@ export interface RelatedCompaniesInfo {
 export interface FinanceYear {
   year: number;
   revenue: number; // выручка, руб.
-  netProfit: number; // чистая прибыль (убыток), руб.
-  assets: number; // балансовая стоимость активов, руб.
-  capital: number; // капитал и резервы, руб.
-  accountsPayable: number; // кредиторская задолженность, руб.
+  /**
+   * Чистая прибыль (убыток), руб. У реального источника (ФНС, датасет
+   * "доходы/расходы") это РАСЧЁТНОЕ значение (выручка − расходы), не
+   * официальная строка формы 2 — см. isNetProfitEstimated.
+   */
+  netProfit: number;
+  /** true — netProfit расчётный (реальный источник не публикует официальную строку «чистая прибыль»), см. providers/girbo.ts. */
+  isNetProfitEstimated?: boolean;
+  /**
+   * Активы/капитал/кредиторская задолженность — доступны только из полной
+   * бухгалтерской отчётности (форма 1+2), которой нет в бесплатных открытых
+   * данных (см. README). undefined — этих полей для года нет ни в
+   * демо-, ни в реальном источнике.
+   */
+  assets?: number; // балансовая стоимость активов, руб.
+  capital?: number; // капитал и резервы, руб.
+  accountsPayable?: number; // кредиторская задолженность, руб.
   meta: FactMeta;
 }
 
@@ -246,6 +268,23 @@ export interface RiskCategoryScore {
   weight: number; // доля в итоговом балле, 0..1
   facts: string[]; // выявленные факты (для матрицы рисков)
   consequences: string[]; // возможные последствия (для матрицы рисков)
+  /** Подкреплена ли категория реальными (не демо) данными — см. RiskAssessment.coverage. */
+  isReal: boolean;
+}
+
+/**
+ * Покрытие оценки реальными данными. КРИТИЧЕСКИ ВАЖНО: правила risk-engine
+ * (см. rules.ts) сами исключают из расчёта категории, чей источник помечен
+ * reliability "demo" — итоговый балл строится ТОЛЬКО по реальным/частичным
+ * данным. Это поле — прозрачная метрика того, какая доля из 8 категорий
+ * риска (см. RiskCategoryKey) сейчас подкреплена реальными данными.
+ */
+export interface RiskCoverage {
+  realCategories: number;
+  totalCategories: number;
+  percent: number; // 0..100
+  /** true, если покрытие ниже порога уверенной оценки — см. risk-engine/index.ts PRELIMINARY_COVERAGE_THRESHOLD. */
+  isPreliminary: boolean;
 }
 
 export interface RiskAssessment {
@@ -255,6 +294,7 @@ export interface RiskAssessment {
   positiveFactors: string[];
   riskFactors: string[];
   contributions: RuleContribution[]; // полная трассировка расчёта
+  coverage: RiskCoverage;
   computedAt: string;
   engineVersion: string;
 }

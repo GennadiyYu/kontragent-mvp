@@ -69,7 +69,7 @@ export default function CompanyHeader({ dossier }: { dossier: CompanyDossier }) 
           </div>
         </div>
 
-        <RiskScoreCard score={dossier.riskAssessment.totalScore} level={dossier.riskAssessment.level} />
+        <RiskScoreCard score={dossier.riskAssessment.totalScore} level={dossier.riskAssessment.level} coverage={dossier.riskAssessment.coverage} />
       </div>
     </div>
   );

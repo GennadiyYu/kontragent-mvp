@@ -1,9 +1,49 @@
-import type { RiskAssessment, RiskCategoryScore } from "@/types/dossier";
-import { RISK_CATEGORY_LABEL, scoreToRiskLevel, type RiskCategoryKey, type RiskLevel } from "@/types/common";
+import type { RiskAssessment, RiskCategoryScore, RiskCoverage } from "@/types/dossier";
+import { RISK_CATEGORY_LABEL, scoreToRiskLevel, type FactMeta, type RiskCategoryKey, type RiskLevel } from "@/types/common";
 import { RISK_RULES } from "./rules";
 import type { RiskEngineInput } from "./types";
 
-export const RISK_ENGINE_VERSION = "1.0.0";
+export const RISK_ENGINE_VERSION = "1.1.0";
+
+/** Ниже этого покрытия реальными данными (%) оценка помечается как предварительная. */
+const PRELIMINARY_COVERAGE_THRESHOLD = 50;
+
+function isRealMeta(meta: FactMeta): boolean {
+  return meta.reliability === "verified";
+}
+
+/**
+ * Подкреплена ли категория риска реальными (не демо) данными хотя бы по
+ * одному из своих источников. Используется ТОЛЬКО для метрики покрытия
+ * (UI «Достоверность оценки»); сам расчёт баллов гейтится независимо, на
+ * уровне каждого правила — см. isReal() в rules.ts.
+ */
+function isCategoryReal(category: RiskCategoryKey, input: RiskEngineInput): boolean {
+  switch (category) {
+    case "financial":
+      return isRealMeta(input.finance.meta);
+    case "judicial":
+      return isRealMeta(input.arbitration.meta);
+    case "enforcement":
+      return isRealMeta(input.enforcement.meta);
+    case "bankruptcy":
+      return isRealMeta(input.bankruptcy.meta);
+    case "corporate":
+      return (
+        isRealMeta(input.company.meta) ||
+        isRealMeta(input.identity.meta) ||
+        isRealMeta(input.management.director.meta) ||
+        isRealMeta(input.relatedCompanies.meta) ||
+        isRealMeta(input.licenses.meta)
+      );
+    case "tax":
+      return isRealMeta(input.enforcement.meta) || (isRealMeta(input.identity.meta) && input.identity.taxDebtAmount !== undefined);
+    case "procurement":
+      return isRealMeta(input.procurement.meta);
+    case "reputational":
+      return isRealMeta(input.reputation.meta);
+  }
+}
 
 /**
  * Вес категории в итоговом балле. Сумма весов равна 1. Подобраны так, чтобы
@@ -110,6 +150,7 @@ export function computeRiskAssessment(input: RiskEngineInput): RiskAssessment {
     const score = Math.round(clip(rawScore, 0, 100));
     const level = scoreToRiskLevel(score);
     const facts = categoryContributions.filter((c) => c.points > 0).map((c) => c.description);
+    const categoryIsReal = isCategoryReal(category, input);
     return {
       category,
       score,
@@ -117,8 +158,18 @@ export function computeRiskAssessment(input: RiskEngineInput): RiskAssessment {
       weight: CATEGORY_WEIGHTS[category],
       facts: facts.length > 0 ? facts : [`Значимых факторов риска в категории «${RISK_CATEGORY_LABEL[category]}» не выявлено`],
       consequences: [CONSEQUENCE_TEMPLATES[category][level]],
+      isReal: categoryIsReal,
     };
   });
+
+  const realCategoriesCount = categories.filter((c) => c.isReal).length;
+  const coveragePercent = Math.round((realCategoriesCount / categories.length) * 100);
+  const coverage: RiskCoverage = {
+    realCategories: realCategoriesCount,
+    totalCategories: categories.length,
+    percent: coveragePercent,
+    isPreliminary: coveragePercent < PRELIMINARY_COVERAGE_THRESHOLD,
+  };
 
   // Взвешенное среднее в чистом виде математически не позволяет ни одной
   // категории в одиночку поднять итог выше (её вес × 100) — например, при
@@ -175,6 +226,7 @@ export function computeRiskAssessment(input: RiskEngineInput): RiskAssessment {
     positiveFactors,
     riskFactors,
     contributions,
+    coverage,
     computedAt: new Date().toISOString(),
     engineVersion: RISK_ENGINE_VERSION,
   };

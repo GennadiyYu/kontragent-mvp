@@ -1,7 +1,22 @@
 import { formatMoney } from "@/lib/utils/format";
 import { yearsSince } from "@/lib/utils/format";
 import type { RuleContribution } from "@/types/dossier";
+import type { FactMeta } from "@/types/common";
 import type { RiskRule } from "./types";
+
+/**
+ * КРИТИЧЕСКИ ВАЖНО: демонстрационные данные никогда не должны участвовать в
+ * итоговом Risk Score реальной компании. Каждое правило ниже проверяет
+ * reliability источника своих входных данных и возвращает [] (без вклада в
+ * балл), если источник — демо. Единственный способ узнать реальность
+ * категории для UI («Достоверность оценки: XX%») — совокупность этих же
+ * проверок в risk-engine/index.ts (computeRiskAssessment → coverage).
+ */
+function isReal(meta: FactMeta): boolean {
+  // Строго "verified" — "unconfirmed" (источник не ответил вовремя) тоже не
+  // должен подкреплять балл: в этом случае у нас нет факта, а не факт "риска нет".
+  return meta.reliability === "verified";
+}
 
 /**
  * Правила скоринга контрагента. Каждое правило — чистая функция от фактов
@@ -22,6 +37,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "corporate.company_age",
     category: "corporate",
     evaluate: (input) => {
+      if (!isReal(input.company.meta)) return [];
       const age = yearsSince(input.company.registrationDate);
       if (age < 1) {
         return [{ ruleId: "corporate.company_age", category: "corporate", points: 10, description: "Компания зарегистрирована менее года назад — отсутствует история деятельности" }];
@@ -39,7 +55,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "corporate.unreliable_data_mark",
     category: "corporate",
     evaluate: (input) =>
-      input.identity.hasUnreliableDataMark
+      isReal(input.identity.meta) && input.identity.hasUnreliableDataMark
         ? [{ ruleId: "corporate.unreliable_data_mark", category: "corporate", points: 20, description: "В ЕГРЮЛ внесена запись о недостоверности сведений о компании" }]
         : [],
   },
@@ -47,7 +63,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "corporate.mass_address",
     category: "corporate",
     evaluate: (input) =>
-      input.identity.addressIsMassRegistration
+      isReal(input.identity.meta) && input.identity.addressIsMassRegistration
         ? [{ ruleId: "corporate.mass_address", category: "corporate", points: 8, description: "Юридический адрес относится к адресам массовой регистрации" }]
         : [],
   },
@@ -55,6 +71,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "corporate.mass_or_disqualified_director",
     category: "corporate",
     evaluate: (input) => {
+      if (!isReal(input.management.director.meta)) return [];
       const out: RuleContribution[] = [];
       if (input.management.director.isDisqualified) {
         out.push({ ruleId: "corporate.disqualified_director", category: "corporate" as const, points: 25, description: "Руководитель компании дисквалифицирован" });
@@ -68,7 +85,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "corporate.minimal_capital",
     category: "corporate",
     evaluate: (input) =>
-      typeof input.company.authorizedCapital === "number" && input.company.authorizedCapital <= 10_000
+      isReal(input.company.meta) && typeof input.company.authorizedCapital === "number" && input.company.authorizedCapital <= 10_000
         ? [{ ruleId: "corporate.minimal_capital", category: "corporate", points: 4, description: "Уставный капитал находится на минимально допустимом уровне" }]
         : [],
   },
@@ -76,6 +93,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "corporate.related_companies_trouble",
     category: "corporate",
     evaluate: (input) => {
+      if (!isReal(input.relatedCompanies.meta)) return [];
       const troubled = input.relatedCompanies.items.filter((c) => c.status === "liquidated" || c.status === "bankrupt");
       if (troubled.length === 0) return [];
       const points = Math.min(20, troubled.length * 7);
@@ -91,6 +109,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "corporate.license_problem",
     category: "corporate",
     evaluate: (input) => {
+      if (!isReal(input.licenses.meta)) return [];
       const problem = input.licenses.items.some((l) => l.status === "revoked" || l.status === "suspended");
       if (problem) {
         return [{ ruleId: "corporate.license_problem", category: "corporate", points: 22, description: "Лицензия, необходимая для основного вида деятельности, приостановлена или отозвана" }];
@@ -102,7 +121,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "corporate.cbr_warning_list",
     category: "corporate",
     evaluate: (input) => {
-      if (!input.licenses.warningListEntry) return [];
+      if (!isReal(input.licenses.meta) || !input.licenses.warningListEntry) return [];
       return [{
         ruleId: "corporate.cbr_warning_list",
         category: "corporate",
@@ -117,7 +136,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "financial.trend",
     category: "financial",
     evaluate: (input) => {
-      if (input.finance.years.length === 0) return [];
+      if (!isReal(input.finance.meta) || input.finance.years.length === 0) return [];
       if (input.finance.trend === "decline") {
         return [{ ruleId: "financial.trend_decline", category: "financial", points: 26, description: "Устойчивое снижение выручки на протяжении нескольких отчётных периодов" }];
       }
@@ -131,6 +150,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "financial.profit_loss",
     category: "financial",
     evaluate: (input) => {
+      if (!isReal(input.finance.meta)) return [];
       const last = input.finance.years[0];
       if (!last) return [];
       if (last.netProfit < 0) {
@@ -146,8 +166,9 @@ export const RISK_RULES: RiskRule[] = [
     id: "financial.negative_equity",
     category: "financial",
     evaluate: (input) => {
+      if (!isReal(input.finance.meta)) return [];
       const last = input.finance.years[0];
-      if (!last) return [];
+      if (!last || typeof last.capital !== "number") return [];
       if (last.capital < 0) {
         return [{ ruleId: "financial.negative_equity", category: "financial", points: 34, description: `Отрицательные чистые активы (капитал и резервы) по итогам ${last.year} года` }];
       }
@@ -158,8 +179,9 @@ export const RISK_RULES: RiskRule[] = [
     id: "financial.debt_load",
     category: "financial",
     evaluate: (input) => {
+      if (!isReal(input.finance.meta)) return [];
       const last = input.finance.years[0];
-      if (!last || last.revenue <= 0) return [];
+      if (!last || last.revenue <= 0 || typeof last.accountsPayable !== "number") return [];
       const ratio = last.accountsPayable / last.revenue;
       if (ratio > 0.5) {
         return [{ ruleId: "financial.high_debt_load", category: "financial", points: 22, description: `Кредиторская задолженность превышает 50% годовой выручки (${formatMoney(last.accountsPayable)})` }];
@@ -173,6 +195,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "judicial.defendant_case_count",
     category: "judicial",
     evaluate: (input) => {
+      if (!isReal(input.arbitration.meta)) return [];
       const n = input.arbitration.totalCasesAsDefendant;
       if (n === 0) return [];
       let points = 0;
@@ -192,6 +215,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "judicial.claim_amount_ratio",
     category: "judicial",
     evaluate: (input) => {
+      if (!isReal(input.arbitration.meta) || !isReal(input.finance.meta)) return [];
       const last = input.finance.years[0];
       if (!last || last.revenue <= 0) return [];
       const ratio = input.arbitration.totalClaimAmountAsDefendant / last.revenue;
@@ -210,6 +234,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "judicial.pending_cases",
     category: "judicial",
     evaluate: (input) => {
+      if (!isReal(input.arbitration.meta)) return [];
       const pending = input.arbitration.cases.filter((c) => c.role === "defendant" && c.status === "pending").length;
       if (pending === 0) return [];
       return [{ ruleId: "judicial.pending_cases", category: "judicial", points: 10, description: `${pending} судебных спора(ов) с участием компании в статусе «ответчик» ещё не рассмотрены` }];
@@ -221,6 +246,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "enforcement.active_count",
     category: "enforcement",
     evaluate: (input) => {
+      if (!isReal(input.enforcement.meta)) return [];
       const n = input.enforcement.activeCount;
       if (n === 0) return [];
       let points = 0;
@@ -239,6 +265,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "enforcement.tax_related",
     category: "tax",
     evaluate: (input) => {
+      if (!isReal(input.enforcement.meta)) return [];
       const taxProceedings = input.enforcement.proceedings.filter((p) => p.status === "active" && p.subject.includes("налог"));
       if (taxProceedings.length === 0) return [];
       return [{
@@ -249,13 +276,28 @@ export const RISK_RULES: RiskRule[] = [
       }];
     },
   },
+  {
+    id: "tax.arrears",
+    category: "tax",
+    evaluate: (input) => {
+      // Реальные открытые данные ФНС (датасет debtam, см. scripts/import-fns-risk.mjs) —
+      // независимый от ФССП сигнал: сама недоимка/пени/штраф, а не факт
+      // принудительного взыскания. taxDebtAmount === undefined — проверка не
+      // выполнялась (демо-компания или БД не заполнена), не путать с null
+      // ("проверено, задолженности нет").
+      if (!isReal(input.identity.meta) || !input.identity.taxDebtAmount) return [];
+      const amount = input.identity.taxDebtAmount;
+      const points = amount > 1_000_000 ? 30 : amount > 100_000 ? 18 : 8;
+      return [{ ruleId: "tax.arrears", category: "tax", points, description: `Налоговая задолженность (пени/недоимка/штрафы) по данным ФНС: ${formatMoney(amount)}` }];
+    },
+  },
 
   // -------------------------------------------------------------- BANKRUPTCY
   {
     id: "bankruptcy.active_case",
     category: "bankruptcy",
     evaluate: (input) => {
-      if (!input.bankruptcy.hasActiveCase) return [];
+      if (!isReal(input.bankruptcy.meta) || !input.bankruptcy.hasActiveCase) return [];
       const severeStage = input.bankruptcy.stage === "receivership";
       return [{
         ruleId: "bankruptcy.active_case",
@@ -269,7 +311,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "bankruptcy.warning_publication",
     category: "bankruptcy",
     evaluate: (input) => {
-      if (input.bankruptcy.hasActiveCase || input.bankruptcy.publications.length === 0) return [];
+      if (!isReal(input.bankruptcy.meta) || input.bankruptcy.hasActiveCase || input.bankruptcy.publications.length === 0) return [];
       return [{
         ruleId: "bankruptcy.warning_publication",
         category: "bankruptcy",
@@ -284,7 +326,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "procurement.rnp",
     category: "procurement",
     evaluate: (input) =>
-      input.procurement.isInUnreliableSuppliersRegistry
+      isReal(input.procurement.meta) && input.procurement.isInUnreliableSuppliersRegistry
         ? [{ ruleId: "procurement.rnp", category: "procurement", points: 45, description: "Компания включена в реестр недобросовестных поставщиков (РНП)" }]
         : [],
   },
@@ -292,6 +334,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "procurement.terminated_contracts",
     category: "procurement",
     evaluate: (input) => {
+      if (!isReal(input.procurement.meta)) return [];
       const terminated = input.procurement.contracts.filter((c) => c.status === "terminated").length;
       if (terminated === 0) return [];
       return [{
@@ -306,6 +349,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "procurement.stable_history",
     category: "procurement",
     evaluate: (input) => {
+      if (!isReal(input.procurement.meta)) return [];
       const terminated = input.procurement.contracts.some((c) => c.status === "terminated");
       if (input.procurement.isInUnreliableSuppliersRegistry || terminated) return [];
       if (input.procurement.asSupplierContractsCount >= 5) {
@@ -325,6 +369,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "reputational.negative_mentions",
     category: "reputational",
     evaluate: (input) => {
+      if (!isReal(input.reputation.meta)) return [];
       const n = input.reputation.negativeMentionsCount;
       if (n === 0) return [];
       let points = 0;
@@ -338,6 +383,7 @@ export const RISK_RULES: RiskRule[] = [
     id: "reputational.positive_only",
     category: "reputational",
     evaluate: (input) => {
+      if (!isReal(input.reputation.meta)) return [];
       const hasPositive = input.reputation.mentions.some((m) => m.sentiment === "positive");
       if (hasPositive && input.reputation.negativeMentionsCount === 0) {
         return [{ ruleId: "reputational.positive_only", category: "reputational", points: -5, description: "В открытых источниках отсутствуют негативные упоминания" }];

@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# локальная БД и сырые датасеты open data (наполняются npm run import:*, см. README)
+/data/

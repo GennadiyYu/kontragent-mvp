@@ -1,6 +1,7 @@
 /** Форматирование чисел, денег и дат в русской локали — общие хелперы для UI и PDF. */
 
-export function formatMoney(amount: number): string {
+export function formatMoney(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined) return "нет данных";
   const abs = Math.abs(amount);
   const sign = amount < 0 ? "-" : "";
   if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(1).replace(/\.0$/, "")} млрд ₽`;

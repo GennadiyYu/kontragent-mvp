@@ -1,3 +1,4 @@
+import type { RiskCoverage } from "@/types/dossier";
 import { RISK_LEVEL_LABEL, type RiskLevel } from "@/types/common";
 
 const RING_COLOR: Record<RiskLevel, string> = {
@@ -21,7 +22,7 @@ const PANEL_COLOR: Record<RiskLevel, string> = {
   critical: "bg-red-50 ring-red-200",
 };
 
-export default function RiskScoreCard({ score, level }: { score: number; level: RiskLevel }) {
+export default function RiskScoreCard({ score, level, coverage }: { score: number; level: RiskLevel; coverage: RiskCoverage }) {
   const circumference = 2 * Math.PI * 42;
   const offset = circumference * (1 - score / 100);
 
@@ -54,6 +55,20 @@ export default function RiskScoreCard({ score, level }: { score: number; level: 
         <span className={level === "moderate" ? "font-semibold text-amber-600" : ""}>31–60</span>
         <span className={level === "high" ? "font-semibold text-orange-600" : ""}>61–80</span>
         <span className={level === "critical" ? "font-semibold text-red-600" : ""}>81–100</span>
+      </div>
+
+      <div className="mt-4 w-full border-t border-black/5 pt-3 text-center">
+        <p className="text-[11px] text-slate-500">
+          Достоверность оценки: <span className="font-semibold text-slate-700">{coverage.percent}%</span>
+          <span className="block text-slate-400">
+            проверено {coverage.realCategories} из {coverage.totalCategories} категорий реальными данными
+          </span>
+        </p>
+        {coverage.isPreliminary && (
+          <p className="mt-1.5 rounded-md bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-800">
+            Оценка предварительная: часть источников недоступна
+          </p>
+        )}
       </div>
     </div>
   );

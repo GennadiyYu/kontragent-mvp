@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "import:finance": "node scripts/import-finance.mjs",
+    "import:fns-risk": "node scripts/import-fns-risk.mjs"
   },
   "dependencies": {
     "jspdf": "^4.2.1",
@@ -16,7 +18,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

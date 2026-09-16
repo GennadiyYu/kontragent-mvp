@@ -4,6 +4,8 @@ import { Card, EmptyState, SectionTitle } from "../ui";
 
 const STATUS_STYLE: Record<SourceStatusSummary["status"], string> = {
   ok: "bg-emerald-100 text-emerald-700",
+  partial: "bg-teal-100 text-teal-700",
+  stale: "bg-amber-100 text-amber-700",
   demo: "bg-blue-100 text-blue-700",
   blocked: "bg-slate-200 text-slate-600",
   timeout: "bg-amber-100 text-amber-700",
@@ -13,6 +15,8 @@ const STATUS_STYLE: Record<SourceStatusSummary["status"], string> = {
 
 const STATUS_LABEL: Record<SourceStatusSummary["status"], string> = {
   ok: "Данные получены",
+  partial: "Реальные, но неполные",
+  stale: "Реальные, но устарели",
   demo: "Демо-данные",
   blocked: "Недоступен бесплатно",
   timeout: "Таймаут",

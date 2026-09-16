@@ -34,10 +34,21 @@ export default function FinanceTab({ finance }: { finance: FinanceInfo }) {
 
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label={`Выручка, ${last.year}`} value={formatMoney(last.revenue)} />
-        <Stat label="Чистая прибыль/убыток" value={formatMoney(last.netProfit)} sub={last.netProfit >= 0 ? "прибыль" : "убыток"} />
+        <Stat
+          label={last.isNetProfitEstimated ? "Прибыль/убыток (оценка)" : "Чистая прибыль/убыток"}
+          value={formatMoney(last.netProfit)}
+          sub={last.isNetProfitEstimated ? "расчёт: выручка − расходы, не строка формы 2" : last.netProfit >= 0 ? "прибыль" : "убыток"}
+        />
         <Stat label="Активы" value={formatMoney(last.assets)} />
-        <Stat label="Капитал и резервы" value={formatMoney(last.capital)} sub={last.capital < 0 ? "отрицательные чистые активы" : undefined} />
+        <Stat label="Капитал и резервы" value={formatMoney(last.capital)} sub={typeof last.capital === "number" && last.capital < 0 ? "отрицательные чистые активы" : undefined} />
       </div>
+
+      {typeof last.assets !== "number" && (
+        <p className="mb-3 text-xs text-slate-400">
+          Активы, капитал и кредиторская задолженность недоступны: бесплатных официальных открытых данных с полным
+          балансом (форма 1) не существует — см. вкладку «Источники». Выручка и прибыль — реальные данные ФНС.
+        </p>
+      )}
 
       <p className={`mb-3 text-sm font-medium ${TREND_COLOR[finance.trend]}`}>Динамика: {TREND_LABEL[finance.trend]}</p>
 
@@ -60,7 +71,7 @@ export default function FinanceTab({ finance }: { finance: FinanceInfo }) {
                 <td className="py-2 text-slate-600">{formatMoney(y.revenue)}</td>
                 <td className={`py-2 ${y.netProfit < 0 ? "text-red-600" : "text-slate-600"}`}>{formatMoney(y.netProfit)}</td>
                 <td className="py-2 text-slate-600">{formatMoney(y.assets)}</td>
-                <td className={`py-2 ${y.capital < 0 ? "text-red-600" : "text-slate-600"}`}>{formatMoney(y.capital)}</td>
+                <td className={`py-2 ${typeof y.capital === "number" && y.capital < 0 ? "text-red-600" : "text-slate-600"}`}>{formatMoney(y.capital)}</td>
                 <td className="py-2 text-slate-600">{formatMoney(y.accountsPayable)}</td>
               </tr>
             ))}
