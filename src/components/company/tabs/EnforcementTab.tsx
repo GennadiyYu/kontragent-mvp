@@ -1,6 +1,6 @@
 import type { EnforcementInfo } from "@/types/dossier";
 import { formatDate, formatMoney } from "@/lib/utils/format";
-import { Card, EmptyState, SectionTitle, SourceFootnote, Stat } from "../ui";
+import { Card, EmptyState, SectionTitle, SourceFootnote, Stat, emptyStateText } from "../ui";
 
 export default function EnforcementTab({ enforcement }: { enforcement: EnforcementInfo }) {
   return (
@@ -14,7 +14,7 @@ export default function EnforcementTab({ enforcement }: { enforcement: Enforceme
       </div>
 
       {enforcement.proceedings.length === 0 ? (
-        <EmptyState>Исполнительные производства не найдены.</EmptyState>
+        <EmptyState>{emptyStateText(enforcement.meta.reliability, "Исполнительные производства не найдены.")}</EmptyState>
       ) : (
         <div className="space-y-2">
           {enforcement.proceedings.map((p) => (

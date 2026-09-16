@@ -35,7 +35,17 @@ CREATE TABLE IF NOT EXISTS fns_tax_debt (
 CREATE TABLE IF NOT EXISTS fns_tax_paid (
   inn TEXT PRIMARY KEY,
   total_amount REAL NOT NULL,
-  tax_year INTEGER,
+  period_year INTEGER,
+  snapshot_date TEXT,
+  imported_at TEXT NOT NULL,
+  source_url TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fns_employees (
+  inn TEXT PRIMARY KEY,
+  employees_count INTEGER NOT NULL,
+  period_year INTEGER,
+  snapshot_date TEXT,
   imported_at TEXT NOT NULL,
   source_url TEXT NOT NULL
 );

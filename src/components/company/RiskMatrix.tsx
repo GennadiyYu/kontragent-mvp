@@ -22,7 +22,16 @@ export default function RiskMatrix({ categories }: { categories: RiskCategorySco
               <tr key={cat.category} className="align-top">
                 <td className="rounded-l-lg bg-slate-50 py-3 pl-3 pr-2 font-medium text-slate-800 whitespace-nowrap">
                   {RISK_CATEGORY_LABEL[cat.category]}
-                  <div className="text-xs font-normal text-slate-400">{cat.score}/100</div>
+                  <div className="text-xs font-normal text-slate-400">
+                    {cat.score}/100 · вес {Math.round(cat.weight * 100)}%
+                  </div>
+                  <span
+                    className={`mt-1 inline-block rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                      cat.isReal ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"
+                    }`}
+                  >
+                    {cat.isReal ? "реальные данные" : "не в оценке"}
+                  </span>
                 </td>
                 <td className="bg-slate-50 py-3 pr-2">
                   <RiskBadge level={cat.level} size="sm" />

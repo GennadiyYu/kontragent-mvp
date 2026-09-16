@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { checkCompany } from "@/lib/checkCompany";
 import CompanyHeader from "@/components/company/CompanyHeader";
+import DataPassport from "@/components/company/DataPassport";
 import CompanyTabs, { type TabItem } from "@/components/company/CompanyTabs";
 import RecordRecentCheck from "@/components/company/RecordRecentCheck";
 import OverviewTab from "@/components/company/tabs/OverviewTab";
@@ -36,7 +37,7 @@ export default async function CompanyPage(props: PageProps<"/company/[query]">) 
 
   const tabs: TabItem[] = [
     { id: "overview", label: "Обзор", content: <OverviewTab dossier={dossier} /> },
-    { id: "finance", label: "Финансы", content: <FinanceTab finance={dossier.finance} /> },
+    { id: "finance", label: "Финансы", content: <FinanceTab finance={dossier.finance} identity={dossier.identity} /> },
     { id: "arbitration", label: "Суды", content: <ArbitrationTab arbitration={dossier.arbitration} /> },
     { id: "enforcement", label: "ФССП", content: <EnforcementTab enforcement={dossier.enforcement} /> },
     {
@@ -68,6 +69,7 @@ export default async function CompanyPage(props: PageProps<"/company/[query]">) 
         checkedAt={dossier.generatedAt}
       />
       <CompanyHeader dossier={dossier} />
+      <DataPassport sources={dossier.sources} riskAssessment={dossier.riskAssessment} generatedAt={dossier.generatedAt} />
       <div className="mt-6">
         <CompanyTabs tabs={tabs} />
       </div>

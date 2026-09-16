@@ -48,7 +48,10 @@ export async function checkCompany(rawQuery: string): Promise<CheckCompanyResult
     sources,
     riskAssessment,
     aiSummary,
-    isDemoData: sources.some((s) => !["ok", "partial", "stale"].includes(s.status)),
+    // Новая семантика статусов: "demo" означает ИМЕННО кураторскую демо-компанию
+    // (либо намеренно не подключённый источник) — для реальных компаний ни
+    // один провайдер больше не возвращает "demo" (см. providers/*.ts).
+    isDemoData: sources.some((s) => s.status === "demo"),
   };
 
   // Запись в историю не должна блокировать ответ пользователю при сбое хранилища.

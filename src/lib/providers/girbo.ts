@@ -49,15 +49,29 @@ async function tryRealLookup(query: ResolvedCompanyQuery): Promise<FinanceInfo |
   return { years, trend: computeTrend(years), meta };
 }
 
+function emptyFinance(): FinanceInfo {
+  return { years: [], trend: "unknown", meta: { source: "GIRBO", retrievedAt: new Date().toISOString(), reliability: "unconfirmed" } };
+}
+
 /**
- * Адаптер ГИР БО/ФНС — бухгалтерские показатели. Реальные данные (выручка,
- * расчётная прибыль) — из локальной БД, наполняемой ETL из официального
- * открытого датасета ФНС (см. scripts/import-finance.mjs). Это НЕ полная
- * бухотчётность: активы/капитал/кредиторская задолженность недоступны
- * бесплатно (см. README, "Исследование источников") — эти поля остаются
- * незаполненными даже при реальных данных, UI и PDF помечают это явно.
- * Если для компании нет записи в БД (в датасете ФНС ~1,9 млн компаний из
- * ~4-5 млн действующих юрлиц — набор неполный) — используется демо-профиль.
+ * Адаптер ГИР БО/ФНС — бухгалтерские показатели. Реальные данные (доходы,
+ * расчётный финансовый результат) — из локальной БД, наполняемой ETL из
+ * официального открытого датасета ФНС (см. scripts/import-finance.mjs). Это
+ * НЕ полная бухотчётность: активы/капитал/кредиторская задолженность
+ * недоступны бесплатно (см. README) — эти поля остаются незаполненными даже
+ * при реальных данных, UI и PDF помечают это явно.
+ *
+ * СЕМАНТИКА ОТСУТСТВИЯ ЗАПИСИ (REAL_NOT_FOUND): датасет revexp покрывает
+ * ~1,9 млн компаний из ~4-5 млн действующих юрлиц (не облагаемые/крупнейшие
+ * налогоплательщики/банки отчитываются по другим формам и в набор не
+ * попадают) — отсутствие записи означает ТОЛЬКО «этой компании нет в
+ * ПРОВЕРЕННОМ наборе за опубликованный год», а не «отчётность не сдавалась»
+ * или тем более «выручки не было».
+ *
+ * ДЕМО-ДАННЫЕ (buildCompanyCore) используются ТОЛЬКО для кураторских
+ * демо-компаний (query.curated) — для любого другого запроса при отсутствии
+ * реальной записи возвращается пустой финансовый блок (UI показывает
+ * «Данные пока недоступны», а не выдуманные цифры).
  */
 export const girboAdapter: DataProviderAdapter<GirboData> = {
   id: "GIRBO",
@@ -67,19 +81,31 @@ export const girboAdapter: DataProviderAdapter<GirboData> = {
     await simulateLatency(query.seed, "GIRBO");
     if (signal.aborted) throw new Error("Запрос отменён по таймауту");
 
-    const real = await tryRealLookup(query);
-    if (real) {
-      const latestYear = real.years[0]?.year ?? 0;
-      const isStale = latestYear > 0 && new Date().getFullYear() - latestYear > STALE_AFTER_YEARS;
+    if (!query.curated) {
+      const real = await tryRealLookup(query);
+      if (real) {
+        const latestYear = real.years[0]?.year ?? 0;
+        const isStale = latestYear > 0 && new Date().getFullYear() - latestYear > STALE_AFTER_YEARS;
+        return {
+          source: "GIRBO",
+          // "partial" — не "real_found": реальные данные ФНС есть, но это
+          // только доходы/расходы, без полного баланса (активы/капитал).
+          status: isStale ? "stale" : "partial",
+          data: { finance: real },
+          retrievedAt: new Date().toISOString(),
+          latencyMs: Date.now() - started,
+        };
+      }
+      const wasChecked = Boolean(query.knownInn); // был ли реальный запрос к БД по ИНН, а не просто пропуск проверки
       return {
         source: "GIRBO",
-        // "partial" — не "ok": реальные данные ФНС есть, но это только
-        // выручка/расходы, без полного баланса (активы/капитал) — см. класс
-        // комментарий адаптера. "stale" — если снимок старше STALE_AFTER_YEARS.
-        status: isStale ? "stale" : "partial",
-        data: { finance: real },
+        status: wasChecked ? "real_not_found" : "unavailable",
+        data: { finance: emptyFinance() },
         retrievedAt: new Date().toISOString(),
         latencyMs: Date.now() - started,
+        errorMessage: wasChecked
+          ? "Компании нет в проверенном датасете ФНС (revexp) за опубликованный год — см. семантику REAL_NOT_FOUND в комментарии адаптера"
+          : "Датасет индексирован по ИНН — для запроса без установленного ИНН реальная проверка невозможна",
       };
     }
 
@@ -90,7 +116,6 @@ export const girboAdapter: DataProviderAdapter<GirboData> = {
       data: { finance: core.finance },
       retrievedAt: new Date().toISOString(),
       latencyMs: Date.now() - started,
-      errorMessage: "Компании нет в локальной БД (импортированный датасет ФНС покрывает ~1,9 млн из ~4-5 млн юрлиц) либо БД не наполнена — выполните npm run import:finance",
     };
   },
 };

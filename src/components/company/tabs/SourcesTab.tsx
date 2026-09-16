@@ -3,25 +3,21 @@ import { formatDate, formatDateTime } from "@/lib/utils/format";
 import { Card, EmptyState, SectionTitle } from "../ui";
 
 const STATUS_STYLE: Record<SourceStatusSummary["status"], string> = {
-  ok: "bg-emerald-100 text-emerald-700",
+  real_found: "bg-emerald-100 text-emerald-700",
+  real_not_found: "bg-teal-100 text-teal-700",
   partial: "bg-teal-100 text-teal-700",
   stale: "bg-amber-100 text-amber-700",
+  unavailable: "bg-slate-200 text-slate-600",
   demo: "bg-blue-100 text-blue-700",
-  blocked: "bg-slate-200 text-slate-600",
-  timeout: "bg-amber-100 text-amber-700",
-  unavailable: "bg-red-100 text-red-700",
-  not_applicable: "bg-slate-200 text-slate-600",
 };
 
 const STATUS_LABEL: Record<SourceStatusSummary["status"], string> = {
-  ok: "Данные получены",
-  partial: "Реальные, но неполные",
-  stale: "Реальные, но устарели",
+  real_found: "Найдено (реально)",
+  real_not_found: "Проверено, не найдено",
+  partial: "Реально, но неполно",
+  stale: "Реально, но устарело",
+  unavailable: "Недоступно",
   demo: "Демо-данные",
-  blocked: "Недоступен бесплатно",
-  timeout: "Таймаут",
-  unavailable: "Недоступен",
-  not_applicable: "Неприменимо",
 };
 
 export default function SourcesTab({ sources, events }: { sources: SourceStatusSummary[]; events: EventsInfo }) {
@@ -42,12 +38,12 @@ export default function SourcesTab({ sources, events }: { sources: SourceStatusS
           ))}
         </div>
         <p className="mt-4 text-xs text-slate-400">
-          ФНС (через DaData) и Банк России (через FinOrg.asmx и предупредительный список) возвращают реальные
-          данные — статус «Данные получены». КАД Арбитр, ФССП, ЕИС закупки, Федресурс и ГИР БО помечены «Недоступен
-          бесплатно» — при исследовании подтверждено, что их официальные сервисы либо защищены CAPTCHA, либо не
-          отвечают на автоматические запросы вне браузера (см. README, раздел «Исследование источников»); попытка
-          такие ограничения обойти не предпринималась. Веб-репутация — демонстрационные данные: платный поисковый
-          API сознательно не подключён. Устойчивость к сбоям источников реализована на уровне агрегатора и не
+          «Проверено, не найдено» означает ТОЛЬКО, что записи по этому ИНН нет в проверенном официальном наборе —
+          это не то же самое, что «нарушений/задолженности/банкротства нет». «Недоступно» — бесплатная
+          автоматическая проверка технически невозможна (CAPTCHA/сетевая защита/нужен договор — см. README,
+          «Исследование источников») или источник сознательно не подключён (веб-репутация) — в обоих случаях
+          данные не показываются вообще, а не заменяются демонстрационными. «Демо-данные» — только у кураторских
+          демо-компаний на главной странице. Устойчивость к сбоям источников реализована на уровне агрегатора и не
           влияет на остальные разделы досье.
         </p>
       </Card>

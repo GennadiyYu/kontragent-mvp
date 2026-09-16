@@ -1,13 +1,19 @@
 import type { BankruptcyInfo } from "@/types/dossier";
 import { formatDate } from "@/lib/utils/format";
-import { Card, EmptyState, SectionTitle, SourceFootnote } from "../ui";
+import { Card, EmptyState, SectionTitle, SourceFootnote, emptyStateText } from "../ui";
 
 export default function BankruptcyTab({ bankruptcy }: { bankruptcy: BankruptcyInfo }) {
+  const isUnconfirmed = bankruptcy.meta.reliability === "unconfirmed";
+
   return (
     <Card>
       <SectionTitle>Банкротство</SectionTitle>
 
-      {bankruptcy.hasActiveCase ? (
+      {isUnconfirmed ? (
+        <p className="mb-4 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-600 ring-1 ring-slate-200">
+          Данные пока недоступны — проверка признаков банкротства не выполнялась
+        </p>
+      ) : bankruptcy.hasActiveCase ? (
         <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 ring-1 ring-red-200">
           ⚠ Открыта процедура банкротства: {bankruptcy.stageLabel}
         </p>
@@ -18,7 +24,7 @@ export default function BankruptcyTab({ bankruptcy }: { bankruptcy: BankruptcyIn
       )}
 
       {bankruptcy.publications.length === 0 ? (
-        <EmptyState>Юридически значимые сообщения о банкротстве не найдены.</EmptyState>
+        <EmptyState>{emptyStateText(bankruptcy.meta.reliability, "Юридически значимые сообщения о банкротстве не найдены.")}</EmptyState>
       ) : (
         <div className="space-y-2">
           {bankruptcy.publications.map((p, i) => (

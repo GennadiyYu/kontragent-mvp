@@ -1,4 +1,4 @@
-import type { FinanceInfo } from "@/types/dossier";
+import type { FinanceInfo, RegistryFlags } from "@/types/dossier";
 import { formatMoney } from "@/lib/utils/format";
 import { Card, EmptyState, SectionTitle, SourceFootnote, Stat } from "../ui";
 
@@ -16,28 +16,39 @@ const TREND_COLOR: Record<FinanceInfo["trend"], string> = {
   unknown: "text-slate-500",
 };
 
-export default function FinanceTab({ finance }: { finance: FinanceInfo }) {
+const RESULT_TOOLTIP = "Рассчитано сервисом как доходы минус расходы. Не является официальным показателем чистой прибыли.";
+
+export default function FinanceTab({ finance, identity }: { finance: FinanceInfo; identity: RegistryFlags }) {
+  const isConfirmed = finance.meta.reliability !== "unconfirmed"; // "unconfirmed" — реальный источник не проверялся/недоступен (см. providers/girbo.ts)
+
   if (finance.years.length === 0) {
     return (
       <Card>
         <SectionTitle>Финансы</SectionTitle>
-        <EmptyState>Данные бухгалтерской отчётности не найдены.</EmptyState>
+        <EmptyState>
+          {isConfirmed
+            ? "Данные бухгалтерской отчётности не найдены."
+            : "Данные пока недоступны — проверка по этому разделу не выполнялась или источник временно недоступен."}
+        </EmptyState>
+        <TaxAndScaleFacts identity={identity} />
       </Card>
     );
   }
 
   const last = finance.years[0];
+  const isEstimated = Boolean(last.isNetProfitEstimated);
 
   return (
     <Card>
       <SectionTitle hint={`тренд: ${TREND_LABEL[finance.trend]}`}>Финансовое состояние</SectionTitle>
 
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label={`Выручка, ${last.year}`} value={formatMoney(last.revenue)} />
+        <Stat label={isEstimated ? `Доходы, ${last.year}` : `Выручка, ${last.year}`} value={formatMoney(last.revenue)} />
         <Stat
-          label={last.isNetProfitEstimated ? "Прибыль/убыток (оценка)" : "Чистая прибыль/убыток"}
+          label={isEstimated ? "Расчётный финансовый результат" : "Чистая прибыль/убыток"}
           value={formatMoney(last.netProfit)}
-          sub={last.isNetProfitEstimated ? "расчёт: выручка − расходы, не строка формы 2" : last.netProfit >= 0 ? "прибыль" : "убыток"}
+          sub={isEstimated ? undefined : last.netProfit >= 0 ? "прибыль" : "убыток"}
+          tooltip={isEstimated ? RESULT_TOOLTIP : undefined}
         />
         <Stat label="Активы" value={formatMoney(last.assets)} />
         <Stat label="Капитал и резервы" value={formatMoney(last.capital)} sub={typeof last.capital === "number" && last.capital < 0 ? "отрицательные чистые активы" : undefined} />
@@ -46,7 +57,8 @@ export default function FinanceTab({ finance }: { finance: FinanceInfo }) {
       {typeof last.assets !== "number" && (
         <p className="mb-3 text-xs text-slate-400">
           Активы, капитал и кредиторская задолженность недоступны: бесплатных официальных открытых данных с полным
-          балансом (форма 1) не существует — см. вкладку «Источники». Выручка и прибыль — реальные данные ФНС.
+          балансом (форма 1) не существует — см. вкладку «Источники». Доходы/расходы — официальный набор данных ФНС
+          «Сведения о суммах доходов и расходов» (не путать с полной бухгалтерской отчётностью).
         </p>
       )}
 
@@ -57,8 +69,8 @@ export default function FinanceTab({ finance }: { finance: FinanceInfo }) {
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs font-medium uppercase tracking-wide text-slate-400">
               <th className="py-2">Год</th>
-              <th className="py-2">Выручка</th>
-              <th className="py-2">Чистая прибыль</th>
+              <th className="py-2">{isEstimated ? "Доходы" : "Выручка"}</th>
+              <th className="py-2">{isEstimated ? "Расч. результат" : "Чистая прибыль"}</th>
               <th className="py-2">Активы</th>
               <th className="py-2">Капитал</th>
               <th className="py-2">Кредит. задолженность</th>
@@ -79,7 +91,39 @@ export default function FinanceTab({ finance }: { finance: FinanceInfo }) {
         </table>
       </div>
 
-      <SourceFootnote label="ГИР БО ФНС" url={finance.meta.sourceUrl} />
+      <SourceFootnote label={isEstimated ? "ФНС — открытые данные" : "ГИР БО ФНС"} url={finance.meta.sourceUrl} />
+
+      <TaxAndScaleFacts identity={identity} />
     </Card>
+  );
+}
+
+/** Уплаченные налоги и численность — показатели МАСШТАБА деятельности, не индикаторы риска (см. risk-engine/rules.ts). */
+function TaxAndScaleFacts({ identity }: { identity: RegistryFlags }) {
+  const hasTaxPaid = identity.taxPaidAmount !== undefined;
+  const hasEmployees = identity.employeesCount !== undefined;
+  if (!hasTaxPaid && !hasEmployees) return null;
+
+  return (
+    <div className="mt-5 border-t border-slate-100 pt-4">
+      <SectionTitle hint="показатели масштаба, не индикаторы риска">Налоги и штат (ФНС)</SectionTitle>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {hasTaxPaid && (
+          <Stat
+            label={`Уплачено налогов${identity.taxPaidPeriodYear ? `, ${identity.taxPaidPeriodYear}` : ""}`}
+            value={identity.taxPaidAmount === null ? "нет данных" : formatMoney(identity.taxPaidAmount)}
+            sub={identity.taxPaidAmount === null ? "не найдено в проверенном наборе ФНС" : "показатель масштаба, не риска"}
+          />
+        )}
+        {hasEmployees && (
+          <Stat
+            label={`Численность${identity.employeesPeriodYear ? `, ${identity.employeesPeriodYear}` : ""}`}
+            value={identity.employeesCount === null ? "нет данных" : `${identity.employeesCount} чел.`}
+            sub={identity.employeesCount === null ? "не найдено в проверенном наборе ФНС" : "малая численность — не негативный признак"}
+          />
+        )}
+      </div>
+      <SourceFootnote label="ФНС — открытые данные (paytax/sshr)" />
+    </div>
   );
 }

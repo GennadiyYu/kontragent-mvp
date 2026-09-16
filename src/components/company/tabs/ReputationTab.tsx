@@ -1,6 +1,6 @@
 import type { ReputationInfo } from "@/types/dossier";
 import { formatDate } from "@/lib/utils/format";
-import { Card, EmptyState, SectionTitle, SourceFootnote, Stat } from "../ui";
+import { Card, EmptyState, SectionTitle, SourceFootnote, Stat, emptyStateText } from "../ui";
 
 const SENTIMENT_STYLE: Record<string, string> = {
   positive: "border-emerald-200 bg-emerald-50",
@@ -25,7 +25,7 @@ export default function ReputationTab({ reputation }: { reputation: ReputationIn
       </div>
 
       {reputation.mentions.length === 0 ? (
-        <EmptyState>Упоминания в открытых источниках не найдены.</EmptyState>
+        <EmptyState>{emptyStateText(reputation.meta.reliability, "Упоминания в открытых источниках не найдены.")}</EmptyState>
       ) : (
         <div className="space-y-2">
           {reputation.mentions.map((m, i) => (

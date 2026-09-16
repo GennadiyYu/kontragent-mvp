@@ -7,6 +7,8 @@ export interface EisZakupkiData {
   procurement: ProcurementInfo;
 }
 
+const BLOCKED_REASON = "Открытые данные ЕИС — сплошной общероссийский XML-массив без адресного API; портал и FTP не отвечали на запросы при проверке";
+
 /**
  * Адаптер ЕИС в сфере закупок (zakupki.gov.ru): контракты по 44-ФЗ/223-ФЗ
  * и наличие в реестре недобросовестных поставщиков (РНП).
@@ -17,7 +19,11 @@ export interface EisZakupkiData {
  * и FTP-сервер не отвечали на автоматические запросы при проверке (таймаут —
  * сетевая защита), и (2) даже при доступности это не точечный API «контракты
  * одной компании», а массив на десятки ГБ, требующий ETL/БД для по-запросной
- * выдачи — вне рамок текущего MVP без внешней БД. Источник помечен "blocked".
+ * выдачи — вне рамок текущего MVP. Статус "unavailable" — проверка
+ * технически невозможна, это НЕ означает «контрактов/РНП нет».
+ *
+ * ДЕМО-ДАННЫЕ используются ТОЛЬКО для кураторских демо-компаний — для
+ * реальных компаний данные пусты (UI: «Данные пока недоступны»).
  */
 export const eisZakupkiAdapter: DataProviderAdapter<EisZakupkiData> = {
   id: "EIS_ZAKUPKI",
@@ -26,14 +32,33 @@ export const eisZakupkiAdapter: DataProviderAdapter<EisZakupkiData> = {
     const started = Date.now();
     await simulateLatency(query.seed, "EIS_ZAKUPKI");
     if (signal.aborted) throw new Error("Запрос отменён по таймауту");
-    const core = buildCompanyCore(query);
+
+    if (query.curated) {
+      const core = buildCompanyCore(query);
+      return {
+        source: "EIS_ZAKUPKI",
+        status: "demo",
+        data: { procurement: core.procurement },
+        retrievedAt: new Date().toISOString(),
+        latencyMs: Date.now() - started,
+      };
+    }
+
     return {
       source: "EIS_ZAKUPKI",
-      status: "blocked",
-      data: { procurement: core.procurement },
+      status: "unavailable",
+      data: {
+        procurement: {
+          asSupplierContractsCount: 0,
+          asSupplierTotalAmount: 0,
+          isInUnreliableSuppliersRegistry: false,
+          contracts: [],
+          meta: { source: "EIS_ZAKUPKI", retrievedAt: new Date().toISOString(), reliability: "unconfirmed" },
+        },
+      },
       retrievedAt: new Date().toISOString(),
       latencyMs: Date.now() - started,
-      errorMessage: "Открытые данные ЕИС — сплошной общероссийский XML-массив без адресного API; портал и FTP не отвечали на запросы при проверке",
+      errorMessage: BLOCKED_REASON,
     };
   },
 };

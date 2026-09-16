@@ -15,11 +15,18 @@ export class TemplateAIProvider implements AIProvider {
   async generateSummary(input: AiSummaryInput): Promise<AiSummaryResult> {
     const { company, riskAssessment } = input;
     const levelLabel = RISK_LEVEL_LABEL[riskAssessment.level].toLowerCase();
+    const { tier, percent } = riskAssessment.coverage;
 
     const parts: string[] = [];
-    parts.push(
-      `По результатам автоматической проверки уровень риска работы с «${company.shortName}» оценён как ${levelLabel} (${riskAssessment.totalScore} из 100 баллов).`
-    );
+    if (tier === "insufficient") {
+      parts.push(
+        `Полнота проверки «${company.shortName}» составляет ${percent}% — данных недостаточно для общей квалификации риска. Балл по проверенным факторам: ${riskAssessment.totalScore} из 100.`
+      );
+    } else {
+      parts.push(
+        `По результатам автоматической проверки уровень риска работы с «${company.shortName}» оценён как ${levelLabel}${tier === "preliminary" ? " (предварительно, полнота проверки " + percent + "%)" : ""} (${riskAssessment.totalScore} из 100 баллов).`
+      );
+    }
 
     const topRisks = riskAssessment.riskFactors.slice(0, 3);
     if (topRisks.length > 0) {
@@ -35,7 +42,9 @@ export class TemplateAIProvider implements AIProvider {
 
     if (input.finance.years[0]) {
       const y = input.finance.years[0];
-      parts.push(`Выручка за ${y.year} год составила ${formatMoney(y.revenue)}, финансовый результат — ${formatMoney(y.netProfit)}.`);
+      const label = y.isNetProfitEstimated ? "доходы" : "выручка";
+      const resultLabel = y.isNetProfitEstimated ? "расчётный финансовый результат" : "финансовый результат";
+      parts.push(`${label[0].toUpperCase()}${label.slice(1)} за ${y.year} год составили ${formatMoney(y.revenue)}, ${resultLabel} — ${formatMoney(y.netProfit)}.`);
     }
 
     const recommendation = recommendationForRiskLevel(riskAssessment.level);

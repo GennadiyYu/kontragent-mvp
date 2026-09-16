@@ -39,6 +39,22 @@ export interface RegistryFlags {
   taxDebtAmount?: number | null;
   /** Применяет ли компания спецрежим налогообложения (УСН/АУСН/ЕСХН) — реальные данные ФНС (snr), информационный признак, не влияет на risk-engine. */
   hasSpecialTaxRegime?: boolean;
+  /**
+   * Сумма уплаченных налогов и сборов за период (официальный набор ФНС
+   * «paytax» — сумма полей СумУплНал по всем видам платежей). undefined —
+   * не проверялось; null — проверено, начислений/платежей за период в
+   * наборе не найдено (см. FnsTaxPaidProvider). Показатель масштаба
+   * деятельности, НЕ индикатор риска сам по себе.
+   */
+  taxPaidAmount?: number | null;
+  taxPaidPeriodYear?: number | null;
+  /**
+   * Среднесписочная численность работников (официальный набор ФНС «sshr»).
+   * undefined — не проверялось; null — проверено, записи нет (см.
+   * FnsEmployeesProvider). Малое значение — НЕ негативный признак сам по себе.
+   */
+  employeesCount?: number | null;
+  employeesPeriodYear?: number | null;
   meta: FactMeta;
 }
 
@@ -285,6 +301,14 @@ export interface RiskCoverage {
   percent: number; // 0..100
   /** true, если покрытие ниже порога уверенной оценки — см. risk-engine/index.ts PRELIMINARY_COVERAGE_THRESHOLD. */
   isPreliminary: boolean;
+  /**
+   * Определяет, что можно показывать пользователю (см. risk-engine/index.ts):
+   * "insufficient" (<50%) — общую квалификацию риска («низкий/высокий») показывать НЕЛЬЗЯ,
+   * только «риск по проверенным факторам» и явное предупреждение о нехватке данных;
+   * "preliminary" (50–79%) — можно показать уровень, но с пометкой «предварительная оценка»;
+   * "full" (≥80%) — обычный «Общий риск» без оговорок.
+   */
+  tier: "insufficient" | "preliminary" | "full";
 }
 
 export interface RiskAssessment {
@@ -354,11 +378,11 @@ export interface CompanyDossier {
   riskAssessment: RiskAssessment;
   aiSummary: AiSummary | null;
   /**
-   * true, если хотя бы один раздел досье построен на демонстрационных данных
-   * (см. sources[].status: "demo" означает демо-раздел, "ok" — реальный).
-   * В текущей версии MVP реальный источник подключён только для части
-   * установочных данных (ФНС/ЕГРЮЛ через DaData) — это поле поэтому
-   * практически всегда true.
+   * true, если досье построено на кураторской демо-компании (все разделы —
+   * sources[].status "demo") — специальный demo-режим для витрины сервиса.
+   * Для любого реального ИНН/названия — false: непроверенные разделы имеют
+   * статус "real_not_found"/"unavailable"/"partial", НЕ "demo" — фиктивные
+   * значения для реальных компаний не показываются вообще (см. providers/*.ts).
    */
   isDemoData: boolean;
 }

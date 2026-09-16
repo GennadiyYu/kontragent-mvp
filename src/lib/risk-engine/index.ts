@@ -5,8 +5,17 @@ import type { RiskEngineInput } from "./types";
 
 export const RISK_ENGINE_VERSION = "1.1.0";
 
-/** Ниже этого покрытия реальными данными (%) оценка помечается как предварительная. */
+/**
+ * Пороги покрытия реальными данными для UI (см. RiskCoverage.tier):
+ * < PRELIMINARY_COVERAGE_THRESHOLD (50%) — "insufficient": общую квалификацию
+ * риска («низкий/высокий») показывать нельзя, только балл по проверенным
+ * факторам и явное предупреждение о нехватке данных.
+ * 50–79% — "preliminary": уровень можно показать, но с пометкой
+ * «предварительная оценка».
+ * ≥ FULL_COVERAGE_THRESHOLD (80%) — "full": обычный «Общий риск» без оговорок.
+ */
 const PRELIMINARY_COVERAGE_THRESHOLD = 50;
+const FULL_COVERAGE_THRESHOLD = 80;
 
 function isRealMeta(meta: FactMeta): boolean {
   return meta.reliability === "verified";
@@ -164,11 +173,14 @@ export function computeRiskAssessment(input: RiskEngineInput): RiskAssessment {
 
   const realCategoriesCount = categories.filter((c) => c.isReal).length;
   const coveragePercent = Math.round((realCategoriesCount / categories.length) * 100);
+  const coverageTier: RiskCoverage["tier"] =
+    coveragePercent >= FULL_COVERAGE_THRESHOLD ? "full" : coveragePercent >= PRELIMINARY_COVERAGE_THRESHOLD ? "preliminary" : "insufficient";
   const coverage: RiskCoverage = {
+    tier: coverageTier,
     realCategories: realCategoriesCount,
     totalCategories: categories.length,
     percent: coveragePercent,
-    isPreliminary: coveragePercent < PRELIMINARY_COVERAGE_THRESHOLD,
+    isPreliminary: coverageTier !== "full",
   };
 
   // Взвешенное среднее в чистом виде математически не позволяет ни одной

@@ -1,6 +1,6 @@
 import type { ArbitrationInfo } from "@/types/dossier";
 import { formatDate, formatMoney } from "@/lib/utils/format";
-import { Card, EmptyState, SectionTitle, SourceFootnote, Stat } from "../ui";
+import { Card, EmptyState, SectionTitle, SourceFootnote, Stat, emptyStateText } from "../ui";
 
 const STATUS_COLOR: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700",
@@ -21,7 +21,7 @@ export default function ArbitrationTab({ arbitration }: { arbitration: Arbitrati
       </div>
 
       {arbitration.cases.length === 0 ? (
-        <EmptyState>Судебные споры с участием компании не найдены.</EmptyState>
+        <EmptyState>{emptyStateText(arbitration.meta.reliability, "Судебные споры с участием компании не найдены.")}</EmptyState>
       ) : (
         <div className="space-y-2">
           {arbitration.cases.map((c) => (

@@ -40,8 +40,20 @@ function mapFinOrgToLicenses(record: CbrFinOrgRecord, warning: CbrWarningListRec
   };
 }
 
-async function tryRealLookup(query: ResolvedCompanyQuery, signal: AbortSignal): Promise<LicensesInfo | null> {
-  if (query.curated) return null; // кураторские демо-компании — стабильный демо-профиль
+interface CbrLookupResult {
+  licenses: LicensesInfo;
+  /** Найдено ли что-то конкретное (лицензия участника финрынка или запись в предупредительном списке). */
+  found: boolean;
+}
+
+/**
+ * СЕМАНТИКА ОТСУТСТВИЯ ЗАПИСИ (REAL_NOT_FOUND): для подавляющего
+ * большинства обычных компаний, не работающих на финансовом рынке,
+ * отсутствие записи в FinOrg — ОЖИДАЕМЫЙ и корректный результат (это не
+ * означает «компания надёжна», а означает «не регулируется Банком России»).
+ * Предупредительный список проверяется независимо — см. findCbrWarningEntry.
+ */
+async function tryRealLookup(query: ResolvedCompanyQuery, signal: AbortSignal): Promise<CbrLookupResult | null> {
   if (!query.knownInn) return null; // реальные сервисы ЦБ РФ поддерживают точный поиск только по ИНН/ОГРН
 
   try {
@@ -49,35 +61,33 @@ async function tryRealLookup(query: ResolvedCompanyQuery, signal: AbortSignal): 
       fetchCbrFinOrgByInn(query.knownInn, signal),
       findCbrWarningEntry(query.knownInn, signal),
     ]);
-    if (finOrg) return mapFinOrgToLicenses(finOrg, warning);
+    if (finOrg) return { licenses: mapFinOrgToLicenses(finOrg, warning), found: true };
 
-    // Компания не найдена среди участников финансового рынка — это РЕАЛЬНЫЙ и
-    // ожидаемый результат для подавляющего большинства обычных компаний, а
-    // не признак сбоя. Возвращаем настоящий (пустой по лицензиям) результат,
-    // а не демо-заглушку, если хотя бы проверка предупредительного списка
-    // была успешно выполнена (см. findCbrWarningEntry — при сетевой ошибке
-    // список не загрузится и findCbrWarningEntry() тихо вернёт null, что не
-    // отличить от "не найдено"; в рамках MVP это допустимый компромисс).
     const now = new Date().toISOString();
     const meta = { source: "CBR" as const, retrievedAt: now, reliability: "verified" as const };
     return {
-      items: [],
-      warningListEntry: warning ? { sign: warning.sign, addedDate: warning.date || now.slice(0, 10), meta } : null,
-      meta,
+      licenses: { items: [], warningListEntry: warning ? { sign: warning.sign, addedDate: warning.date || now.slice(0, 10), meta } : null, meta },
+      found: Boolean(warning),
     };
   } catch {
     return null;
   }
 }
 
+function emptyLicenses(): LicensesInfo {
+  return { items: [], warningListEntry: null, meta: { source: "CBR", retrievedAt: new Date().toISOString(), reliability: "unconfirmed" } };
+}
+
 /**
  * Адаптер Банка России. РЕАЛЬНЫЕ данные (см. cbrFinOrg.ts) через два
  * официальных бесплатных сервиса ЦБ: SOAP-сервис FinOrg.asmx (лицензии
  * участников финансового рынка) и JSON-реестр предупреждений о признаках
- * нелегальной деятельности. Если компания не найдена ни там, ни там (для
- * подавляющего большинства обычных компаний, не работающих на финансовом
- * рынке, это ожидаемо) — статус "not_applicable"/"demo" с демо-заглушкой,
- * как и раньше.
+ * нелегальной деятельности.
+ *
+ * ДЕМО-ДАННЫЕ (buildCompanyCore) используются ТОЛЬКО для кураторских
+ * демо-компаний — для любого другого запроса при невозможности выполнить
+ * реальную проверку возвращается пустой блок лицензий ("unavailable"), а не
+ * выдуманные цифры (см. задачу data quality).
  */
 export const cbrAdapter: DataProviderAdapter<CbrData> = {
   id: "CBR",
@@ -87,22 +97,31 @@ export const cbrAdapter: DataProviderAdapter<CbrData> = {
     await simulateLatency(query.seed, "CBR");
     if (signal.aborted) throw new Error("Запрос отменён по таймауту");
 
-    const real = await tryRealLookup(query, signal);
-    if (real) {
+    if (!query.curated) {
+      const real = await tryRealLookup(query, signal);
+      if (real) {
+        return {
+          source: "CBR",
+          status: real.found ? "real_found" : "real_not_found",
+          data: { licenses: real.licenses },
+          retrievedAt: new Date().toISOString(),
+          latencyMs: Date.now() - started,
+        };
+      }
       return {
         source: "CBR",
-        status: "ok",
-        data: { licenses: real },
+        status: "unavailable",
+        data: { licenses: emptyLicenses() },
         retrievedAt: new Date().toISOString(),
         latencyMs: Date.now() - started,
+        errorMessage: query.knownInn ? "Сервис ЦБ РФ временно недоступен" : "Поиск по ИНН/ОГРН недоступен для запроса без установленного ИНН",
       };
     }
 
     const core = buildCompanyCore(query);
-    const applicable = core.licenses.items.length > 0;
     return {
       source: "CBR",
-      status: applicable ? "demo" : "not_applicable",
+      status: "demo",
       data: { licenses: core.licenses },
       retrievedAt: new Date().toISOString(),
       latencyMs: Date.now() - started,

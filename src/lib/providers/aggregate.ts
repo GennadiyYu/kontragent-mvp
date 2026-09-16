@@ -16,8 +16,8 @@ const SOURCE_TIMEOUT_MS = 6000;
 
 /**
  * Опрашивает один источник через withTimeout и всегда возвращает
- * ProviderResult — даже при таймауте/ошибке (тогда status "timeout" или
- * "unavailable", data: null). Это ключевой механизм устойчивости: сбой
+ * ProviderResult — даже при таймауте/ошибке (тогда status "unavailable",
+ * data: null). Это ключевой механизм устойчивости: сбой
  * одного источника не прерывает сбор досье в целом.
  */
 async function fetchSource<T>(
@@ -28,11 +28,11 @@ async function fetchSource<T>(
   if (result.ok && result.value) return result.value;
   return {
     source: adapter.id,
-    status: result.timedOut ? "timeout" : "unavailable",
+    status: "unavailable",
     data: null,
     retrievedAt: new Date().toISOString(),
     latencyMs: result.latencyMs,
-    errorMessage: result.error,
+    errorMessage: result.timedOut ? "Источник не ответил вовремя" : result.error,
   };
 }
 
@@ -187,14 +187,12 @@ export async function aggregateDossierData(query: ResolvedCompanyQuery): Promise
   };
 
   const noteByStatus: Record<string, string> = {
-    ok: "Данные получены",
-    partial: "Реальные данные, но заведомо неполные (см. вкладку раздела)",
+    real_found: "Данные найдены в реальном источнике",
+    real_not_found: "Источник реально проверен, записи по этому ИНН нет (см. вкладку раздела — это не означает «нарушений нет»)",
+    partial: "Реальные данные, но заведомо неполные по составу полей (см. вкладку раздела)",
     stale: "Реальные данные найдены, но снимок устарел — рекомендуется повторный импорт",
-    demo: "Демонстрационные данные (интеграция с реальным источником — решение продукта, см. README)",
-    blocked: "Реальный бесплатный автоматический доступ подтверждённо недоступен (см. вкладку «Источники»)",
-    timeout: "Источник не ответил вовремя — раздел построен по доступным данным",
-    unavailable: "Источник временно недоступен",
-    not_applicable: "Неприменимо к виду деятельности компании",
+    unavailable: "Бесплатная автоматическая проверка сейчас невозможна (см. вкладку «Источники») — данные не проверены, не означает «нет данных» по сути вопроса",
+    demo: "Демонстрационные данные кураторской демо-компании либо источник сознательно не подключён (см. README)",
   };
 
   const results = [fns, girbo, kadArbitr, fssp, eisZakupki, fedresurs, cbr, webReputation];

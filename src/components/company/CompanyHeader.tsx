@@ -24,8 +24,8 @@ export default function CompanyHeader({ dossier }: { dossier: CompanyDossier }) 
   const { company, management } = dossier;
   const fnsSource = dossier.sources.find((s) => s.source === "FNS");
   const cbrSource = dossier.sources.find((s) => s.source === "CBR");
-  const isFnsReal = fnsSource?.status === "ok";
-  const isCbrReal = cbrSource?.status === "ok";
+  const isFnsReal = fnsSource?.status === "real_found";
+  const isCbrReal = cbrSource?.status === "real_found" || cbrSource?.status === "real_not_found";
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">

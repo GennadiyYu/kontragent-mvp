@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  *
  * Недоступность отдельного внешнего источника НЕ приводит к ошибке этого
  * эндпоинта — соответствующий раздел досье просто помечается статусом
- * источника "timeout"/"unavailable" (см. sources[] в ответе).
+ * источника "unavailable" (см. sources[] в ответе).
  */
 export async function POST(request: Request) {
   let body: unknown;

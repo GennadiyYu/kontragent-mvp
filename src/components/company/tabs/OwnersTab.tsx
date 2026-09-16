@@ -1,6 +1,6 @@
 import type { LicensesInfo, ManagementInfo, OwnersInfo, RelatedCompaniesInfo } from "@/types/dossier";
 import { formatDate } from "@/lib/utils/format";
-import { Card, EmptyState, SectionTitle, SourceFootnote } from "../ui";
+import { Card, EmptyState, SectionTitle, SourceFootnote, emptyStateText } from "../ui";
 
 const RELATED_STATUS_COLOR: Record<string, string> = {
   active: "bg-emerald-100 text-emerald-700",
@@ -50,7 +50,7 @@ export default function OwnersTab({
       <Card>
         <SectionTitle>Учредители</SectionTitle>
         {owners.founders.length === 0 ? (
-          <EmptyState>Сведения об учредителях не найдены.</EmptyState>
+          <EmptyState>{emptyStateText(owners.meta.reliability, "Сведения об учредителях не найдены.")}</EmptyState>
         ) : (
           <ul className="space-y-2">
             {owners.founders.map((f, i) => (
@@ -70,7 +70,7 @@ export default function OwnersTab({
       <Card>
         <SectionTitle>Связанные организации</SectionTitle>
         {relatedCompanies.items.length === 0 ? (
-          <EmptyState>Связанные организации не выявлены.</EmptyState>
+          <EmptyState>{emptyStateText(relatedCompanies.meta.reliability, "Связанные организации не выявлены.")}</EmptyState>
         ) : (
           <ul className="space-y-2">
             {relatedCompanies.items.map((c) => (

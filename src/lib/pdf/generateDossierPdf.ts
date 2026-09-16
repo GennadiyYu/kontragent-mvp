@@ -216,14 +216,19 @@ export function generateDossierPdf(dossier: CompanyDossier): Buffer {
   d.setFont("PTSans", "bold");
   d.setFontSize(10);
   d.setTextColor(...COLORS.text);
-  d.text("ОБЩИЙ РИСК", MARGIN, scoreY + 15);
+  const coverage = dossier.riskAssessment.coverage;
+  d.text(coverage.tier === "insufficient" ? "РИСК ПО ПРОВЕРЕННЫМ ФАКТОРАМ" : "ОБЩИЙ РИСК", MARGIN, scoreY + 15);
   riskBadgeBlock(w, dossier.riskAssessment.totalScore, dossier.riskAssessment.level);
   w.y = scoreY + 30;
-  const coverage = dossier.riskAssessment.coverage;
+  const coverageNote =
+    coverage.tier === "insufficient"
+      ? " Недостаточно данных для общей оценки контрагента."
+      : coverage.tier === "preliminary"
+        ? " Оценка предварительная: часть источников недоступна."
+        : "";
   w.paragraph(
-    `Достоверность оценки: ${coverage.percent}% (проверено ${coverage.realCategories} из ${coverage.totalCategories} категорий реальными данными).` +
-      (coverage.isPreliminary ? " Оценка предварительная: часть источников недоступна." : ""),
-    { size: 8.5, color: coverage.isPreliminary ? RISK_COLOR.high : COLORS.muted, bold: coverage.isPreliminary }
+    `Полнота проверки: ${coverage.percent}% (проверено ${coverage.realCategories} из ${coverage.totalCategories} категорий реальными данными).${coverageNote}`,
+    { size: 8.5, color: coverage.tier !== "full" ? RISK_COLOR.high : COLORS.muted, bold: coverage.tier !== "full" }
   );
   w.divider();
 
@@ -280,21 +285,42 @@ export function generateDossierPdf(dossier: CompanyDossier): Buffer {
   // --- 4. Финансовое состояние ---
   w.sectionHeading(4, "ФИНАНСОВОЕ СОСТОЯНИЕ");
   if (dossier.finance.years.length === 0) {
-    w.paragraph("Данные бухгалтерской отчётности не найдены.");
+    w.paragraph(
+      dossier.finance.meta.reliability === "unconfirmed"
+        ? "Данные пока недоступны — проверка по этому разделу не выполнялась или источник временно недоступен."
+        : "Данные бухгалтерской отчётности не найдены."
+    );
   } else {
     w.bulletList(
-      dossier.finance.years.map(
-        (y) =>
-          `${y.year} год: выручка ${formatMoney(y.revenue)}, чистая прибыль/убыток ${formatMoney(y.netProfit)}, капитал ${formatMoney(y.capital)}, кредиторская задолженность ${formatMoney(y.accountsPayable)}`
-      )
+      dossier.finance.years.map((y) => {
+        const revenueLabel = y.isNetProfitEstimated ? "доходы" : "выручка";
+        const resultLabel = y.isNetProfitEstimated ? "расчётный финансовый результат (доходы − расходы, не строка формы 2)" : "чистая прибыль/убыток";
+        return `${y.year} год: ${revenueLabel} ${formatMoney(y.revenue)}, ${resultLabel} ${formatMoney(y.netProfit)}, капитал ${formatMoney(y.capital)}, кредиторская задолженность ${formatMoney(y.accountsPayable)}`;
+      })
     );
+  }
+  if (dossier.identity.taxPaidAmount || dossier.identity.employeesCount) {
+    const parts: string[] = [];
+    if (typeof dossier.identity.taxPaidAmount === "number") {
+      parts.push(`уплачено налогов за ${dossier.identity.taxPaidPeriodYear ?? "отчётный период"}: ${formatMoney(dossier.identity.taxPaidAmount)}`);
+    }
+    if (typeof dossier.identity.employeesCount === "number") {
+      parts.push(`среднесписочная численность за ${dossier.identity.employeesPeriodYear ?? "отчётный период"}: ${dossier.identity.employeesCount} чел.`);
+    }
+    if (parts.length > 0) {
+      w.paragraph(`Показатели масштаба (ФНС, не индикаторы риска): ${parts.join("; ")}.`, { size: 8.5, color: COLORS.muted });
+    }
   }
 
   // --- 5. Арбитраж ---
   w.sectionHeading(5, "АРБИТРАЖ");
-  w.paragraph(
-    `Дел в роли ответчика: ${dossier.arbitration.totalCasesAsDefendant} (на сумму ${formatMoney(dossier.arbitration.totalClaimAmountAsDefendant)}). Дел в роли истца: ${dossier.arbitration.totalCasesAsPlaintiff}.`
-  );
+  if (dossier.arbitration.meta.reliability === "unconfirmed") {
+    w.paragraph("Данные пока недоступны — проверка по этому разделу не выполнялась.");
+  } else {
+    w.paragraph(
+      `Дел в роли ответчика: ${dossier.arbitration.totalCasesAsDefendant} (на сумму ${formatMoney(dossier.arbitration.totalClaimAmountAsDefendant)}). Дел в роли истца: ${dossier.arbitration.totalCasesAsPlaintiff}.`
+    );
+  }
   if (dossier.arbitration.cases.length > 0) {
     w.bulletList(
       dossier.arbitration.cases
@@ -305,7 +331,11 @@ export function generateDossierPdf(dossier: CompanyDossier): Buffer {
 
   // --- 6. Исполнительные производства ---
   w.sectionHeading(6, "ИСПОЛНИТЕЛЬНЫЕ ПРОИЗВОДСТВА");
-  w.paragraph(`Действующих производств: ${dossier.enforcement.activeCount} на сумму ${formatMoney(dossier.enforcement.activeAmount)}.`);
+  if (dossier.enforcement.meta.reliability === "unconfirmed") {
+    w.paragraph("Данные пока недоступны — проверка по этому разделу не выполнялась.");
+  } else {
+    w.paragraph(`Действующих производств: ${dossier.enforcement.activeCount} на сумму ${formatMoney(dossier.enforcement.activeAmount)}.`);
+  }
   if (dossier.enforcement.proceedings.length > 0) {
     w.bulletList(
       dossier.enforcement.proceedings.slice(0, 8).map((p) => `№ ${p.number} от ${formatDate(p.date)} — ${p.subject}, ${formatMoney(p.amount)}, статус: ${p.statusLabel}`)
@@ -314,28 +344,46 @@ export function generateDossierPdf(dossier: CompanyDossier): Buffer {
 
   // --- 7. Банкротные факторы ---
   w.sectionHeading(7, "БАНКРОТНЫЕ ФАКТОРЫ");
-  w.paragraph(dossier.bankruptcy.hasActiveCase ? `Открыта процедура банкротства: ${dossier.bankruptcy.stageLabel ?? ""}.` : "Активная процедура банкротства не выявлена.");
+  w.paragraph(
+    dossier.bankruptcy.meta.reliability === "unconfirmed"
+      ? "Данные пока недоступны — проверка признаков банкротства не выполнялась."
+      : dossier.bankruptcy.hasActiveCase
+        ? `Открыта процедура банкротства: ${dossier.bankruptcy.stageLabel ?? ""}.`
+        : "Активная процедура банкротства не выявлена."
+  );
   if (dossier.bankruptcy.publications.length > 0) {
     w.bulletList(dossier.bankruptcy.publications.map((p) => `${formatDate(p.date)} — ${p.type}: ${p.description}`));
   }
 
   // --- 8. Госзакупки ---
   w.sectionHeading(8, "ГОСЗАКУПКИ");
-  w.paragraph(
-    `Контрактов в роли поставщика: ${dossier.procurement.asSupplierContractsCount} на сумму ${formatMoney(dossier.procurement.asSupplierTotalAmount)}. В реестре недобросовестных поставщиков (РНП): ${dossier.procurement.isInUnreliableSuppliersRegistry ? "ДА" : "нет"}.`
-  );
+  if (dossier.procurement.meta.reliability === "unconfirmed") {
+    w.paragraph("Данные пока недоступны — проверка по этому разделу не выполнялась.");
+  } else {
+    w.paragraph(
+      `Контрактов в роли поставщика: ${dossier.procurement.asSupplierContractsCount} на сумму ${formatMoney(dossier.procurement.asSupplierTotalAmount)}. В реестре недобросовестных поставщиков (РНП): ${dossier.procurement.isInUnreliableSuppliersRegistry ? "ДА" : "нет"}.`
+    );
+  }
 
   // --- 9. Связанные организации ---
   w.sectionHeading(9, "СВЯЗАННЫЕ ОРГАНИЗАЦИИ");
   if (dossier.relatedCompanies.items.length === 0) {
-    w.paragraph("Связанные организации не выявлены.");
+    w.paragraph(
+      dossier.relatedCompanies.meta.reliability === "unconfirmed"
+        ? "Данные пока недоступны — источник для этого факта сейчас не подключён."
+        : "Связанные организации не выявлены."
+    );
   } else {
     w.bulletList(dossier.relatedCompanies.items.map((c) => `${c.name} (ИНН ${c.inn}) — ${c.relationType}, статус: ${c.statusLabel}`));
   }
 
   // --- 10. Репутационный фон ---
   w.sectionHeading(10, "РЕПУТАЦИОННЫЙ ФОН");
-  w.paragraph(`Негативных упоминаний в открытых источниках: ${dossier.reputation.negativeMentionsCount}.`);
+  if (dossier.reputation.meta.reliability === "unconfirmed") {
+    w.paragraph("Данные пока недоступны — платный поисковый API в этом MVP сознательно не подключён.");
+  } else {
+    w.paragraph(`Негативных упоминаний в открытых источниках: ${dossier.reputation.negativeMentionsCount}.`);
+  }
   if (dossier.reputation.mentions.length > 0) {
     w.bulletList(dossier.reputation.mentions.slice(0, 8).map((m) => `${formatDate(m.date)} — ${m.title}`));
   }

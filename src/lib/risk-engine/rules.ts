@@ -287,6 +287,25 @@ export const RISK_RULES: RiskRule[] = [
       // ("проверено, задолженности нет").
       if (!isReal(input.identity.meta) || !input.identity.taxDebtAmount) return [];
       const amount = input.identity.taxDebtAmount;
+
+      // Методологически обоснованное использование "уплаченных налогов"
+      // (datasет paytax) — НЕ как самостоятельный риск-фактор, а как масштабный
+      // делитель: задолженность в 500 тыс ₽ для компании, платящей 50 млн ₽
+      // налогов в год, и для компании, платящей 100 тыс ₽, — качественно
+      // разные по значимости сигналы. При отсутствии данных об уплаченных
+      // налогах — откат на абсолютные пороги (грубее, но не требует paytax).
+      const taxPaid = input.identity.taxPaidAmount;
+      if (typeof taxPaid === "number" && taxPaid > 0) {
+        const ratio = amount / taxPaid;
+        const points = ratio > 1 ? 32 : ratio > 0.3 ? 20 : ratio > 0.05 ? 10 : 4;
+        return [{
+          ruleId: "tax.arrears",
+          category: "tax",
+          points,
+          description: `Налоговая задолженность по данным ФНС: ${formatMoney(amount)} (${Math.round(ratio * 100)}% от уплаченных налогов за ${input.identity.taxPaidPeriodYear ?? "отчётный период"} — ${formatMoney(taxPaid)})`,
+        }];
+      }
+
       const points = amount > 1_000_000 ? 30 : amount > 100_000 ? 18 : 8;
       return [{ ruleId: "tax.arrears", category: "tax", points, description: `Налоговая задолженность (пени/недоимка/штрафы) по данным ФНС: ${formatMoney(amount)}` }];
     },

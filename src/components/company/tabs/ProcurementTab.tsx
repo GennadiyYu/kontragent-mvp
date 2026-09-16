@@ -1,6 +1,6 @@
 import type { ProcurementInfo } from "@/types/dossier";
 import { formatDate, formatMoney } from "@/lib/utils/format";
-import { Card, EmptyState, SectionTitle, SourceFootnote, Stat } from "../ui";
+import { Card, EmptyState, SectionTitle, SourceFootnote, Stat, emptyStateText } from "../ui";
 
 const STATUS_COLOR: Record<string, string> = {
   executed: "bg-emerald-100 text-emerald-700",
@@ -9,6 +9,8 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default function ProcurementTab({ procurement }: { procurement: ProcurementInfo }) {
+  const isUnconfirmed = procurement.meta.reliability === "unconfirmed";
+
   return (
     <Card>
       <SectionTitle>Государственные закупки</SectionTitle>
@@ -22,11 +24,11 @@ export default function ProcurementTab({ procurement }: { procurement: Procureme
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Stat label="Контрактов (поставщик)" value={String(procurement.asSupplierContractsCount)} />
         <Stat label="Сумма контрактов" value={formatMoney(procurement.asSupplierTotalAmount)} />
-        <Stat label="В РНП" value={procurement.isInUnreliableSuppliersRegistry ? "Да" : "Нет"} />
+        <Stat label="В РНП" value={isUnconfirmed ? "не проверено" : procurement.isInUnreliableSuppliersRegistry ? "Да" : "Нет"} />
       </div>
 
       {procurement.contracts.length === 0 ? (
-        <EmptyState>Контракты не найдены.</EmptyState>
+        <EmptyState>{emptyStateText(procurement.meta.reliability, "Контракты не найдены.")}</EmptyState>
       ) : (
         <div className="space-y-2">
           {procurement.contracts.map((c) => (

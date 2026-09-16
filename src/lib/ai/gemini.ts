@@ -13,7 +13,12 @@ const SYSTEM_INSTRUCTION = `Ты — ассистент-аналитик сер�
 - придумывать любые факты, компании, суммы, даты или события, которых нет во входных данных;
 - изменять, оспаривать или пересчитывать итоговый рейтинг риска — он уже рассчитан и является окончательным;
 - делать выводы, не подтверждённые переданными фактами;
-- упоминать источники или события, отсутствующие во входных данных.
+- упоминать источники или события, отсутствующие во входных данных;
+- трактовать непроверенный раздел (поле "проверено": false) как «нарушений/задолженности/банкротства нет» —
+  правильная формулировка: «данные по этому разделу недоступны», а не утверждение об отсутствии проблемы;
+- называть оценку «низким/умеренным/высоким/критическим риском», если покрытиеРеальнымиДанными имеет tier
+  "insufficient" — в этом случае можно упоминать только балл по проверенным факторам и явно указать на
+  недостаточность данных для общей оценки. При tier "preliminary" — явно называть оценку предварительной.
 
 Отвечай ТОЛЬКО валидным JSON по заданной схеме, без markdown и пояснений вне JSON.`;
 
@@ -43,15 +48,22 @@ function buildUserPrompt(input: AiSummaryInput): string {
       факторыРиска: input.riskAssessment.riskFactors,
       положительныеФакторы: input.riskAssessment.positiveFactors,
     },
-    финансы: input.finance.years.slice(0, 2).map((y) => ({ год: y.year, выручка: y.revenue, прибыль: y.netProfit })),
-    арбитраж: { ответчик: input.arbitration.totalCasesAsDefendant, суммаТребований: input.arbitration.totalClaimAmountAsDefendant },
-    исполнительныеПроизводства: { действующих: input.enforcement.activeCount, сумма: input.enforcement.activeAmount },
-    банкротство: { активнаяПроцедура: input.bankruptcy.hasActiveCase, стадия: input.bankruptcy.stageLabel ?? null },
-    закупки: { поставщикВРНП: input.procurement.isInUnreliableSuppliersRegistry },
-    репутация: { негативныхУпоминаний: input.reputation.negativeMentionsCount },
+    покрытиеРеальнымиДанными: `${input.riskAssessment.coverage.percent}% (${input.riskAssessment.coverage.tier})`,
+    // проверено=false означает, что источник недоступен — поля ниже (0/false)
+    // НЕ являются подтверждённым результатом проверки, это заглушка. Такие
+    // разделы нужно явно называть непроверенными, а не пересказывать как факт.
+    финансы: {
+      проверено: input.finance.meta.reliability === "verified",
+      годы: input.finance.years.slice(0, 2).map((y) => ({ год: y.year, [y.isNetProfitEstimated ? "доходы" : "выручка"]: y.revenue, [y.isNetProfitEstimated ? "расчётныйРезультат" : "прибыль"]: y.netProfit })),
+    },
+    арбитраж: { проверено: input.arbitration.meta.reliability === "verified", ответчик: input.arbitration.totalCasesAsDefendant, суммаТребований: input.arbitration.totalClaimAmountAsDefendant },
+    исполнительныеПроизводства: { проверено: input.enforcement.meta.reliability === "verified", действующих: input.enforcement.activeCount, сумма: input.enforcement.activeAmount },
+    банкротство: { проверено: input.bankruptcy.meta.reliability === "verified", активнаяПроцедура: input.bankruptcy.hasActiveCase, стадия: input.bankruptcy.stageLabel ?? null },
+    закупки: { проверено: input.procurement.meta.reliability === "verified", поставщикВРНП: input.procurement.isInUnreliableSuppliersRegistry },
+    репутация: { проверено: input.reputation.meta.reliability === "verified", негативныхУпоминаний: input.reputation.negativeMentionsCount },
   };
 
-  return `Вот структурированные факты о компании и рассчитанный рейтинг риска (JSON):\n${JSON.stringify(facts, null, 2)}\n\nСформируй аналитическое резюме строго по этим данным согласно системной инструкции.`;
+  return `Вот структурированные факты о компании и рассчитанный рейтинг риска (JSON):\n${JSON.stringify(facts, null, 2)}\n\nСформируй аналитическое резюме строго по этим данным согласно системной инструкции. Для разделов с "проверено": false прямо укажи, что данные недоступны — НЕ формулируй это как "нарушений/задолженности нет".`;
 }
 
 interface GeminiCandidateResponse {

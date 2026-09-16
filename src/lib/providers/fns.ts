@@ -11,6 +11,8 @@ import { LEGAL_FORMS } from "@/lib/mock-data/lexicon";
 import { simulateLatency } from "./mockLatency";
 import { fetchDaDataByInnOrOgrn, fetchDaDataByName, type DaDataPartyRecord } from "./dadata";
 import { findDisqualifiedMatch, getSpecialRegime, getTaxDebt } from "./fnsRiskDb";
+import { getTaxPaid } from "./fnsTaxPaid";
+import { getEmployeeCount } from "./fnsEmployees";
 import type { DataProviderAdapter } from "./types";
 
 export interface FnsData {
@@ -61,10 +63,17 @@ async function mapDaDataRecord(record: DaDataPartyRecord): Promise<Pick<FnsData,
     meta,
   };
 
-  // Реальные открытые данные ФНС (локальная БД, см. providers/fnsRiskDb.ts и
-  // scripts/import-fns-risk.mjs) — налоговая задолженность и спецрежим.
-  // undefined, если ETL не выполнялся или ИНН не найден в датасете.
-  const [taxDebt, specialRegime] = await Promise.all([getTaxDebt(d.inn), getSpecialRegime(d.inn)]);
+  // Реальные открытые данные ФНС (локальная БД, см. providers/fnsRiskDb.ts,
+  // fnsTaxPaid.ts, fnsEmployees.ts и scripts/import-fns-risk.mjs) —
+  // налоговая задолженность, спецрежим, уплаченные налоги, численность.
+  // undefined, если ETL не выполнялся; null, если ИНН проверен в датасете,
+  // но записи нет (см. семантику "REAL_NOT_FOUND" в каждом провайдере).
+  const [taxDebt, specialRegime, taxPaid, employees] = await Promise.all([
+    getTaxDebt(d.inn),
+    getSpecialRegime(d.inn),
+    getTaxPaid(d.inn),
+    getEmployeeCount(d.inn),
+  ]);
 
   const identity: RegistryFlags = {
     // Бесплатный тариф DaData не даёт отдельный признак «массовый адрес» —
@@ -74,6 +83,10 @@ async function mapDaDataRecord(record: DaDataPartyRecord): Promise<Pick<FnsData,
     hasUnreliableDataMark: Boolean(d.invalid),
     taxDebtAmount: taxDebt ? taxDebt.amount : null,
     hasSpecialTaxRegime: specialRegime ? specialRegime.isUsn || specialRegime.isAusn || specialRegime.isEsxn || specialRegime.isSrp : undefined,
+    taxPaidAmount: taxPaid ? taxPaid.amount : null,
+    taxPaidPeriodYear: taxPaid ? taxPaid.periodYear : null,
+    employeesCount: employees ? employees.count : null,
+    employeesPeriodYear: employees ? employees.periodYear : null,
     meta,
   };
 
@@ -114,24 +127,35 @@ async function tryRealLookup(query: ResolvedCompanyQuery, signal: AbortSignal): 
   }
 }
 
+/** "Пустое, но проверенное" состояние учредителей/связей для реальной компании — НЕ демо-заглушка (см. fetch() ниже). */
+function emptyOwnersAndRelated(): Pick<FnsData, "owners" | "relatedCompanies"> {
+  const meta = { source: "FNS" as const, retrievedAt: new Date().toISOString(), reliability: "unconfirmed" as const };
+  return {
+    owners: { founders: [], meta },
+    relatedCompanies: { items: [], meta },
+  };
+}
+
 /**
- * Адаптер ФНС России (ЕГРЮЛ). Установочные данные, статус и руководитель —
- * РЕАЛЬНЫЕ (через бесплатный API DaData, если задан DADATA_API_KEY и запрос
- * не относится к кураторским демо-компаниям), учредители и связанные
- * организации — демонстрационные (на бесплатном тарифе DaData их не отдаёт).
- * Если реальный источник недоступен по любой причине — полный откат на
- * демо-генератор, помеченный reliability: "demo".
+ * Адаптер ФНС России (ЕГРЮЛ). Установочные данные, статус, руководитель,
+ * налоговая задолженность/уплаченные налоги/численность — РЕАЛЬНЫЕ (через
+ * бесплатный API DaData + локальную БД открытых данных ФНС), кроме
+ * кураторских демо-компаний.
+ *
+ * КРИТИЧНО (см. задачу data quality): демо-профиль (`buildCompanyCore`)
+ * используется ТОЛЬКО для кураторских демо-компаний (`query.curated`).
+ * Для любого другого запроса — либо реальные данные, либо явно ПУСТОЙ
+ * результат (`emptyOwnersAndRelated`, statusLabel через UI — «Данные пока
+ * недоступны»), но никогда фиктивные цифры, выданные за настоящие.
  *
  * Про «Связи» (владелец/директор → другие юрлица): ИССЛЕДОВАНО (см. README)
  * — датасеты ФНС «массовый руководитель/учредитель» существуют формально,
  * но ФАКТИЧЕСКИ ЗАБРОШЕНЫ (последнее обновление — 22.05.2021, почти пустые
- * файлы) — использовать нельзя. Owners/relatedCompanies остаются
- * демонстрационными по этой причине, а не потому что не пытались.
- * Дисквалификация директора, напротив, реальна и актуальна (реестр
- * обновляется) — см. fnsRiskDb.findDisqualifiedMatch ниже: сверяется СТРОГО
- * по паре (ФИО директора + название именно этой компании), чтобы не
- * приписать дисквалификацию однофамильцу. Налоговая задолженность
- * (identity.taxDebtAmount) — тоже реальные данные ФНС (датасет debtam).
+ * файлы) — использовать нельзя, поэтому owners/relatedCompanies для реальных
+ * компаний всегда пусты (REAL_NOT_FOUND в смысле «источника для этого факта
+ * сейчас просто нет», а не демо). Дисквалификация директора, напротив,
+ * реальна и актуальна — сверяется СТРОГО по паре (ФИО директора + название
+ * именно этой компании), чтобы не приписать дисквалификацию однофамильцу.
  */
 export const fnsAdapter: DataProviderAdapter<FnsData> = {
   id: "FNS",
@@ -141,21 +165,61 @@ export const fnsAdapter: DataProviderAdapter<FnsData> = {
     await simulateLatency(query.seed, "FNS");
     if (signal.aborted) throw new Error("Запрос отменён по таймауту");
 
-    const core = buildCompanyCore(query);
     const real = await tryRealLookup(query, signal);
+    if (real) {
+      return {
+        source: "FNS",
+        status: "real_found",
+        data: { ...real, ...emptyOwnersAndRelated() },
+        retrievedAt: new Date().toISOString(),
+        latencyMs: Date.now() - started,
+      };
+    }
 
+    if (query.curated) {
+      const core = buildCompanyCore(query);
+      return {
+        source: "FNS",
+        status: "demo",
+        data: { company: core.company, identity: core.identity, management: core.management, owners: core.owners, relatedCompanies: core.relatedCompanies },
+        retrievedAt: new Date().toISOString(),
+        latencyMs: Date.now() - started,
+      };
+    }
+
+    // Не кураторский запрос, но и реальную личность подтвердить не удалось
+    // (нет ключа DaData / компания не найдена в ЕГРЮЛ / сбой источника) —
+    // честно показываем пустое состояние, а не выдуманный профиль.
+    const emptyMeta = { source: "FNS" as const, retrievedAt: new Date().toISOString(), reliability: "unconfirmed" as const };
+    const placeholderCompany: CompanyIdentity = {
+      fullName: query.knownFullName ?? query.rawQuery,
+      shortName: query.knownShortName ?? query.rawQuery,
+      inn: query.knownInn ?? "—",
+      ogrn: query.knownOgrn ?? "—",
+      legalForm: "Не подтверждено",
+      status: "active",
+      statusLabel: "Не подтверждено",
+      registrationDate: emptyMeta.retrievedAt.slice(0, 10),
+      okvedCode: "—",
+      okvedName: "Не подтверждено",
+      legalAddress: "Не подтверждено",
+      meta: emptyMeta,
+    };
     return {
       source: "FNS",
-      status: real ? "ok" : "demo",
+      status: "unavailable",
       data: {
-        company: real?.company ?? core.company,
-        identity: real?.identity ?? core.identity,
-        management: real?.management ?? core.management,
-        owners: core.owners, // учредители: демо даже при реальных установочных данных (см. комментарий выше)
-        relatedCompanies: core.relatedCompanies,
+        company: placeholderCompany,
+        identity: { addressIsMassRegistration: false, hasUnreliableDataMark: false, meta: emptyMeta },
+        management: {
+          director: { fullName: "Не указан", position: "Не указан", isMassDirector: false, isDisqualified: false, meta: emptyMeta },
+          registryFlags: { addressIsMassRegistration: false, hasUnreliableDataMark: false, meta: emptyMeta },
+        },
+        ...emptyOwnersAndRelated(),
       },
       retrievedAt: new Date().toISOString(),
       latencyMs: Date.now() - started,
+      errorMessage: "Компания не найдена в ЕГРЮЛ (через DaData) либо ключ DADATA_API_KEY не задан",
     };
   },
 };
